@@ -8104,9 +8104,9 @@ textarea,
 }
 
 .ai-capability-popover .ai-capability-popover-head {
-  min-height: 68px;
+  min-height: 60px;
   flex: none;
-  padding: 13px 14px 13px 18px;
+  padding: 10px 12px 10px 16px;
 }
 
 .ai-capability-popover .ai-capability-popover-head > span {
@@ -8119,9 +8119,9 @@ textarea,
 }
 
 .ai-capability-popover .ai-capability-popover-head > button {
-  width: 40px !important;
-  min-width: 40px !important;
-  height: 40px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 36px !important;
   flex: none !important;
   padding: 0 !important;
   border: 0 !important;
@@ -8132,8 +8132,8 @@ textarea,
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -8141,14 +8141,14 @@ textarea,
 .ai-capability-popover .ai-capability-grid > button {
   width: 100% !important;
   min-width: 0 !important;
-  height: 70px !important;
+  height: 58px !important;
   flex: none !important;
   display: flex !important;
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px !important;
-  padding: 10px 14px !important;
+  gap: 10px !important;
+  padding: 8px 12px !important;
   border: 1px solid var(--line);
   border-radius: 12px;
   text-align: left;
@@ -14291,6 +14291,34 @@ button > svg * {
   padding: 12px 42px 12px 12px;
 }
 
+.oschat-app .sidebar-list article.favorite > button:first-child {
+  padding-right: 76px;
+}
+
+.oschat-app .sidebar-list article > .chat-favorite-toggle {
+  position: absolute;
+  right: 38px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+}
+
+.oschat-app .sidebar-list article > .chat-favorite-toggle svg {
+  fill: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.oschat-app .sidebar-list article > .chat-favorite-toggle:hover,
+.oschat-app .sidebar-list article > .chat-favorite-toggle:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel2));
+  color: var(--accent);
+}
+
 /* The workspace permissions chooser is portalled into the chat root. Legacy
    capability-bar rules below the component styles therefore still match it
    and can turn the dialog back into a horizontal strip. Keep this final,
@@ -14320,14 +14348,14 @@ button > svg * {
 .oschat-main.chat-view
   .ai-capability-bar.ai-capability-popover
   > .ai-capability-popover-head {
-  min-height: 72px;
+  min-height: 60px;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   box-sizing: border-box;
-  padding: 14px 14px 14px 18px;
+  padding: 10px 12px 10px 16px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -14366,9 +14394,9 @@ button > svg * {
   .ai-capability-bar.ai-capability-popover
   > .ai-capability-popover-head
   > button {
-  width: 40px !important;
-  min-width: 40px !important;
-  height: 40px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 36px !important;
   flex: none !important;
   display: grid !important;
   place-items: center;
@@ -14395,9 +14423,9 @@ button > svg * {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
-  gap: 10px !important;
+  gap: 8px !important;
   box-sizing: border-box;
-  padding: 14px !important;
+  padding: 10px !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
 }
@@ -14408,16 +14436,16 @@ button > svg * {
   > button {
   width: 100% !important;
   min-width: 0 !important;
-  height: 70px !important;
-  min-height: 70px !important;
+  height: 58px !important;
+  min-height: 58px !important;
   flex: none !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
   justify-content: flex-start !important;
-  gap: 12px !important;
+  gap: 10px !important;
   box-sizing: border-box;
-  padding: 10px 14px !important;
+  padding: 8px 12px !important;
   border: 1px solid var(--line);
   border-radius: 12px;
   text-align: left;
@@ -14472,4 +14500,21 @@ button > svg * {
     > .ai-capability-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Permission controls are portalled to the themed application root so they
+   can float above the conversation without inheriting the chat layout. Keep
+   the surface explicitly opaque: otherwise a missing or overridden theme
+   token makes the controls appear directly on top of message content. */
+.oschat-app > .ai-capability-popover-layer {
+  color: var(--text);
+}
+
+.oschat-app
+  > .ai-capability-popover-layer
+  > .ai-capability-bar.ai-capability-popover {
+  isolation: isolate;
+  border: 1px solid var(--line) !important;
+  background: var(--overlay-surface) !important;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 52%) !important;
 }

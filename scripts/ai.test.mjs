@@ -30,7 +30,10 @@ import { localModelCapabilities } from "../dist-electron/main/model-capabilities
 import { ComputerSystemPermissionError } from "../dist-electron/main/computer-permissions.js";
 
 test("interactive chat completion recognizes only renderable artifact payloads", () => {
-  assert.equal(requiresInteractiveChatContent("can you show me the table"), true);
+  assert.equal(
+    requiresInteractiveChatContent("can you show me the table"),
+    true,
+  );
   assert.equal(requiresInteractiveChatContent("thanks"), false);
   assert.equal(
     hasRenderableInteractiveContent(
@@ -39,13 +42,13 @@ test("interactive chat completion recognizes only renderable artifact payloads",
     true,
   );
   assert.equal(
-    hasRenderableInteractiveContent(
-      "```oschat-widget\n{not valid json}\n```",
-    ),
+    hasRenderableInteractiveContent("```oschat-widget\n{not valid json}\n```"),
     false,
   );
   assert.equal(
-    hasRenderableInteractiveContent("| Car | Speed |\n| --- | --- |\n| A | 320 |"),
+    hasRenderableInteractiveContent(
+      "| Car | Speed |\n| --- | --- |\n| A | 320 |",
+    ),
     true,
   );
 });
@@ -550,7 +553,8 @@ test("ordinary substantive prose receives an interactive card without another in
   service.remoteReply = async () => {
     turns += 1;
     return {
-      content: "Photosynthesis converts light energy into stored chemical energy.",
+      content:
+        "Photosynthesis converts light energy into stored chemical energy.",
       toolCalls: [],
     };
   };

@@ -68,7 +68,15 @@ Users install it with their graphical package manager or `sudo apt install ./osC
 
 ## Application updates
 
-The full installer is also the updater payload; there is no separate patch file. The updater implementation is retained from osCode for compatibility, but the permanent osChat updater release URLs must be supplied before public distribution. Until then, do not publish an osChat build that points at production osCode update channels.
+The full installer is also the updater payload; there is no separate patch file. Upload each installer without renaming it to its permanent osChat updater channel:
+
+- [macOS Apple Silicon](https://github.com/OmerDesignX/osChat/releases/tag/macOS-Apple-Silicon-Updater)
+- [macOS Intel](https://github.com/OmerDesignX/osChat/releases/tag/macOS-Intel-Updater)
+- [Windows 11](https://github.com/OmerDesignX/osChat/releases/tag/Windows-11-Updater)
+- [Windows 10](https://github.com/OmerDesignX/osChat/releases/tag/Windows-10-Updater)
+- [Linux](https://github.com/OmerDesignX/osChat/releases/tag/Linux-Updater)
+
+Windows 10 and Windows 11 currently receive the same installer, uploaded to both channels. Keeping the channels separate permits operating-system-specific packages later without changing installed clients.
 
 When automatic updates are enabled, osChat downloads a newer verified package but lets the user decide when to install. Manual Check, Download, and Install controls remain in Settings. Windows opens the verified NSIS installer, Linux opens the `.deb` with the system package manager, and unsigned macOS builds open the DMG for the user to drag osChat into Applications.
 

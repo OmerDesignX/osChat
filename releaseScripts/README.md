@@ -25,9 +25,9 @@ The macOS release is unsigned by design. The build disables Electron Builder's c
 
 The same staged installer is used for both a normal versioned release and its permanent updater channel. Keep the generated filename unchanged and upload it as follows:
 
-- upload the arm64 DMG to the future osChat Apple-silicon channel;
-- upload the x64 DMG to the future osChat Intel channel;
-- upload the Windows `.exe` to the future osChat Windows channels; and
-- upload the Linux `.deb` to the future osChat Linux channel.
+- upload the arm64 DMG to [macOS Apple Silicon](https://github.com/OmerDesignX/osChat/releases/tag/macOS-Apple-Silicon-Updater);
+- upload the x64 DMG to [macOS Intel](https://github.com/OmerDesignX/osChat/releases/tag/macOS-Intel-Updater);
+- upload the same Windows `.exe` to [Windows 10](https://github.com/OmerDesignX/osChat/releases/tag/Windows-10-Updater) and [Windows 11](https://github.com/OmerDesignX/osChat/releases/tag/Windows-11-Updater); and
+- upload the Linux `.deb` to [Linux](https://github.com/OmerDesignX/osChat/releases/tag/Linux-Updater).
 
-The application selects the highest newer semantic version in its own channel and verifies the GitHub SHA-256 digest before opening the installer. The permanent channel release must be public, non-draft, and non-prerelease. The osChat updater URLs are placeholders until the maintainer supplies the new repositories. See `docs/RELEASING.md` for the complete user experience and unsigned-macOS limitation.
+The application selects the highest newer semantic version in its own channel and verifies the GitHub SHA-256 digest before opening the installer. Each permanent channel release must be public, non-draft, and non-prerelease. See `docs/RELEASING.md` for the complete user experience and unsigned-macOS limitation.

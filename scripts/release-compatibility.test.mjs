@@ -392,7 +392,9 @@ test("manual release build preserves the verified native package pipeline", () =
   const manifest = JSON.parse(read("package.json"));
   assert.equal(manifest.dependencies["electron-updater"], undefined);
   assert.equal(manifest.build.publish, undefined);
-  assert.match(read("electron/main/updater.ts"), /releases\/tags/);
+  assert.match(read("electron/main/updater.ts"), /updateChannelApiUrl/);
+  assert.match(read("electron/main/updater-policy.ts"), /OmerDesignX\/osChat/);
+  assert.match(read("electron/main/updater-policy.ts"), /releases\/tags/);
   assert.match(read("electron/main/updater.ts"), /sha256:/i);
   assert.match(read("electron/main/updater.ts"), /installReadyUpdate/);
   assert.match(read("electron/main/updater.ts"), /downloadAvailable/);

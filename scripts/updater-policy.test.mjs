@@ -7,13 +7,15 @@ import {
   updateAssetName,
   updateAssetVersion,
   updateChannel,
+  updateChannelApiUrl,
+  updateChannelWebUrl,
 } from "../dist-electron/main/updater-policy.js";
 
 test("application updates are network silent until the user opts in", () => {
   assert.equal(
     isTrustedUpdateUrl(
       false,
-      "https://api.github.com/repos/OmerDesignX/osCode-IDE/releases/latest",
+      "https://api.github.com/repos/OmerDesignX/osChat/releases/latest",
     ),
     false,
   );
@@ -21,13 +23,13 @@ test("application updates are network silent until the user opts in", () => {
 
 test("application updates accept only the official HTTPS GitHub hosts", () => {
   for (const url of [
-    "https://api.github.com/repos/OmerDesignX/osCode-IDE/releases/latest",
-    "https://github.com/OmerDesignX/osCode-IDE/releases/download/v0.2.0/osCode.exe",
+    "https://api.github.com/repos/OmerDesignX/osChat/releases/latest",
+    "https://github.com/OmerDesignX/osChat/releases/download/v0.2.0/osChat.exe",
     "https://release-assets.githubusercontent.com/github-production-release-asset/file",
   ])
     assert.equal(isTrustedUpdateUrl(true, url), true);
   for (const url of [
-    "http://github.com/OmerDesignX/osCode-IDE/releases",
+    "http://github.com/OmerDesignX/osChat/releases",
     "https://github.example.com/update.yml",
     "https://example.com/latest.yml",
   ])
@@ -72,6 +74,35 @@ test("fixed updater tags stay separate by architecture and Windows generation", 
   );
   assert.equal(updateChannel("linux", "x64").tag, "Linux-Updater");
   assert.equal(updateChannel("linux", "arm64"), null);
+});
+
+test("every native updater channel points to the official osChat release page", () => {
+  const channels = [
+    updateChannel("darwin", "arm64"),
+    updateChannel("darwin", "x64"),
+    updateChannel("win32", "x64", "10.0.19045"),
+    updateChannel("win32", "x64", "10.0.22631"),
+    updateChannel("linux", "x64"),
+  ];
+  const expectedTags = [
+    "macOS-Apple-Silicon-Updater",
+    "macOS-Intel-Updater",
+    "Windows-10-Updater",
+    "Windows-11-Updater",
+    "Linux-Updater",
+  ];
+  for (const [index, channel] of channels.entries()) {
+    assert.ok(channel);
+    assert.equal(channel.tag, expectedTags[index]);
+    assert.equal(
+      updateChannelApiUrl(channel),
+      `https://api.github.com/repos/OmerDesignX/osChat/releases/tags/${expectedTags[index]}`,
+    );
+    assert.equal(
+      updateChannelWebUrl(channel),
+      `https://github.com/OmerDesignX/osChat/releases/tag/${expectedTags[index]}`,
+    );
+  }
 });
 
 test("updater channels select the newest matching versioned package", () => {

@@ -167,14 +167,17 @@ function loadFolderScopes(): SavedFolderScopes {
 }
 
 function OsChatWordmark({ settings = false }: { settings?: boolean }) {
+  if (settings) {
+    return (
+      <span className="oschat-wordmark" aria-label="Settings">
+        Settings
+      </span>
+    );
+  }
   return (
-    <span
-      className="oschat-wordmark"
-      aria-label={settings ? "osChat settings" : "osChat"}
-    >
+    <span className="oschat-wordmark" aria-label="osChat">
       <span className="oschat-wordmark-os">os</span>
       <span className="oschat-wordmark-chat">Chat</span>
-      {settings && <span className="oschat-wordmark-suffix"> settings</span>}
     </span>
   );
 }
@@ -1327,7 +1330,9 @@ export function App() {
                 {filteredChats.map((chat) => (
                   <article
                     key={chat.id}
-                    className={chat.id === activeChatId ? "active" : ""}
+                    className={`${chat.id === activeChatId ? "active" : ""}${
+                      chat.favorite ? " favorite" : ""
+                    }`.trim()}
                   >
                     <button
                       type="button"
@@ -1343,6 +1348,17 @@ export function App() {
                         ).slice(0, 70) || "No messages yet"}
                       </small>
                     </button>
+                    {chat.favorite && (
+                      <button
+                        type="button"
+                        className="chat-favorite-toggle"
+                        aria-label={`Remove ${chat.title || "New chat"} from favorites`}
+                        title="Remove from favorites"
+                        onClick={() => void toggleChatFavorite(chat)}
+                      >
+                        <FeatherIcon icon="star" size="16" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="item-more"
@@ -2047,9 +2063,10 @@ function SettingsDialog(props: SettingsProps) {
                 </div>
               </SettingGroup>
               <p className="settings-callout">
-                <FeatherIcon icon="info" size="17" /> osChat currently retains
-                the tested updater channel structure. Replace the repository
-                endpoint when the new osChat release pages are ready.
+                <FeatherIcon icon="info" size="17" /> Updates come from the
+                official osChat GitHub channel for this operating system and
+                architecture. Downloaded installers are SHA-256 verified before
+                they can be opened.
               </p>
             </div>
           )}

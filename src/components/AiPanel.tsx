@@ -741,7 +741,7 @@ export function AiPanel({
       const rect = anchor.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const width = Math.min(580, Math.max(300, viewportWidth - 32));
+      const width = Math.min(520, Math.max(300, viewportWidth - 32));
       const left = Math.min(
         Math.max(16, rect.right - width),
         Math.max(16, viewportWidth - width - 16),
@@ -751,7 +751,7 @@ export function AiPanel({
         left,
         bottom: Math.max(16, viewportHeight - rect.top + 10),
         width,
-        maxHeight: Math.max(220, Math.min(460, rect.top - 26)),
+        maxHeight: Math.max(210, Math.min(400, rect.top - 26)),
       });
     };
 
@@ -3740,7 +3740,7 @@ export function AiPanel({
                   </div>
                 </section>
               </div>,
-              document.body,
+              document.querySelector(".oschat-app") || document.body,
             )}
         </section>
         {workspaceMode && (

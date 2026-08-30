@@ -15,12 +15,11 @@ import {
   updateAssetName,
   updateAssetVersion,
   updateChannel,
+  updateChannelApiUrl,
   type UpdateChannel,
 } from "./updater-policy.js";
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1_000;
-const RELEASE_API_ROOT =
-  "https://api.github.com/repos/OmerDesignX/osCode-IDE/releases/tags";
 const MAX_PACKAGE_BYTES = 2 * 1024 * 1024 * 1024;
 
 type ReleaseAsset = {
@@ -149,7 +148,7 @@ export class AppUpdateService {
       channel: channel.label,
     });
     try {
-      const apiUrl = `${RELEASE_API_ROOT}/${encodeURIComponent(channel.tag)}`;
+      const apiUrl = updateChannelApiUrl(channel);
       if (!isTrustedUpdateUrl(true, apiUrl))
         throw new Error("The update channel address is not trusted");
       const releaseResponse = await fetch(apiUrl, {

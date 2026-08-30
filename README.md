@@ -24,19 +24,41 @@
 
 <p align="center">A private, local-first AI chat and productivity workspace.</p>
 
+osChat is allows you to run local Ai models and agents. osChat features osCode Models derived from Qwen 3.8 Max and come in Small, Medium, and Large. Small can fit on most devices with 8 GB of RAM. No data is sent to the cloud and all processing done on-device.
+
 osChat combines a familiar conversational interface with native document, spreadsheet, and presentation workspaces. Its local agent can research public information, create and revise files, build interactive response widgets, and collaborate beside each editor without requiring a cloud account.
 
-## What is included
+## osCode Models
 
-- Local Small, Medium, and Large model tiers from the shared verified osCode model catalogue
-- Custom GGUF, MLX, PyTorch, and Ollama models
-- Rich documents with DOCX export
-- Formula-aware spreadsheets with XLSX export
-- Slide editing, speaker notes, presentation mode, and PPTX export
-- Interactive tables, charts, metrics, and editable artifacts inside chat
-- Scoped permissions for files, terminal commands, public web research, the agent browser, MCP, and Computer Control
-- Receive-only web safeguards, prompt-injection protection, local encrypted app data, and no telemetry
-- Shared single-pipeline inference across multiple windows, with queued work preserved per chat
+- osCode Models let you run agentic AI on your computer starting with just 8 GB of RAM. You can select from Small, Medium, and Large.
+
+- The models are derived from Qwen 3.8 Max and are rebuilt to be smaller.
+
+- Models in detail: https://github.com/OmerDesignX/osCode-Models
+
+## Browse the Web
+
+- The Ai Agent can browse the web and fetch new information. It also has its own in-built browser.
+
+## Notes: Documents, Spreadsheets, and Presentations
+
+- There are in-built Document, Spreadsheet, and Presentation editors. Take notes yourself or get you Ai agent to help,
+
+## Privacy in your controls / Ai Agent Security
+
+- No data or telemetry is collected. No cloud account is needed.
+
+- You can also turn off agentic AI controls and they are OFF by DEFAULT.
+
+## Computer Control
+
+- When enabled, the Ai agent can control approved apps and perform and complete tasks.
+
+- Please, note this is turned OFF always by DEFAULT and needs approval.
+
+## Run your own Ai models
+
+- You can run other Ai models via GGUF, Ollama, MLX, or PyTorch. osChat Agent exposes full agentic control to the model.
 
 ## Desktop support
 
@@ -44,26 +66,7 @@ osChat combines a familiar conversational interface with native document, spread
 - Windows 10 and Windows 11 on x64
 - Linux on x64 through the native Debian package
 
-Native installers are built on their target operating system with the scripts in `releaseScripts`. Generated installers are staged in the ignored `release-assets` directory for manual publication.
-
-## Development
-
-Install Node.js and pnpm, then run:
-
-```bash
-pnpm install
-pnpm dev
-```
-
-Useful checks:
-
-```bash
-pnpm typecheck
-pnpm test
-pnpm smoke
-```
-
-Model weights are downloaded only when a user chooses a tier. The current updater channel structure remains in place while the dedicated osChat release repository is prepared.
+Check out releases to find installers.
 
 ## Privacy and safety
 

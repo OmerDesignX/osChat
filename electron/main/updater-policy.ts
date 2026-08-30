@@ -6,12 +6,22 @@ const trustedUpdateHosts = new Set([
   "release-assets.githubusercontent.com",
 ]);
 
+export const UPDATE_REPOSITORY = "OmerDesignX/osChat";
+
 export type UpdateChannel = {
   tag: string;
   label: string;
   platform: "darwin" | "win32" | "linux";
   architecture: "arm64" | "x64";
 };
+
+export function updateChannelApiUrl(channel: UpdateChannel) {
+  return `https://api.github.com/repos/${UPDATE_REPOSITORY}/releases/tags/${encodeURIComponent(channel.tag)}`;
+}
+
+export function updateChannelWebUrl(channel: UpdateChannel) {
+  return `https://github.com/${UPDATE_REPOSITORY}/releases/tag/${encodeURIComponent(channel.tag)}`;
+}
 
 export function isTrustedUpdateUrl(allowed: boolean, rawUrl: string) {
   if (!allowed) return false;

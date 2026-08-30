@@ -7,10 +7,16 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pnpmRoot = join(root, "node_modules", ".pnpm");
 
 function packageFile(prefix, relativePath) {
-  const folder = readdirSync(pnpmRoot).find((entry) => entry.startsWith(prefix));
-  if (!folder) throw new Error(`Missing ${prefix} in node_modules. Run pnpm install first.`);
+  const folder = readdirSync(pnpmRoot).find((entry) =>
+    entry.startsWith(prefix),
+  );
+  if (!folder)
+    throw new Error(
+      `Missing ${prefix} in node_modules. Run pnpm install first.`,
+    );
   const result = join(pnpmRoot, folder, relativePath);
-  if (!existsSync(result)) throw new Error(`Missing brand dependency: ${result}`);
+  if (!existsSync(result))
+    throw new Error(`Missing brand dependency: ${result}`);
   return result;
 }
 
@@ -68,7 +74,10 @@ function drawWordmark(context, colour) {
 function png(name, colour) {
   const canvas = createCanvas(width, height);
   drawWordmark(canvas.getContext("2d"), colour);
-  writeFileSync(join(output, `oschat-${name}.png`), canvas.toBuffer("image/png"));
+  writeFileSync(
+    join(output, `oschat-${name}.png`),
+    canvas.toBuffer("image/png"),
+  );
 }
 
 const encodedManrope = readFileSync(manrope).toString("base64");
@@ -98,4 +107,6 @@ for (const [name, colour] of Object.entries(colours)) {
 svg("wordmark-dark", colours.black);
 svg("wordmark-light", colours.white);
 
-console.log("Generated osChat brand assets with Manrope 600 + Playfair Display 600.");
+console.log(
+  "Generated osChat brand assets with Manrope 600 + Playfair Display 600.",
+);

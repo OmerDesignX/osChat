@@ -59,6 +59,9 @@ test("productivity workspaces autosave and expose organized item metadata", () =
   assert.match(app, /title: value\.slice\(0, 120\)/);
   assert.match(app, /icon="edit-3" size="15" \/> Rename/);
   assert.match(app, /toggleChatFavorite/);
+  assert.match(app, /className="chat-favorite-toggle"/);
+  assert.match(app, /Remove .* from favorites/);
+  assert.match(styles, /\.chat-favorite-toggle/);
   assert.match(app, /duplicateChatCollection/);
   assert.match(app, /openChatAction\("delete", chat\)/);
   assert.match(app, /chat-action-dialog/);
@@ -406,6 +409,14 @@ test("settings use one consolidated, balanced panel system", () => {
   assert.match(
     styles,
     /\.oschat-main\.chat-view\s+\.ai-capability-bar\.ai-capability-popover\s*\{[\s\S]*?flex-direction:\s*column\s*!important;[\s\S]*?overflow:\s*hidden\s*!important;/,
+  );
+  assert.match(
+    aiPanel,
+    /document\.querySelector\("\.oschat-app"\) \|\| document\.body/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app\s*>\s*\.ai-capability-popover-layer[\s\S]*?background:\s*var\(--overlay-surface\)\s*!important;/,
   );
   assert.match(
     styles,
