@@ -1,0 +1,47 @@
+.bridge-error {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  background: #061923;
+  color: #edf8fd;
+  text-align: center;
+}
+.bridge-error .mark {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  object-fit: cover;
+}
+.bridge-error h1 {
+  margin: 18px 0 7px;
+  font:
+    600 28px "Playfair Display",
+    serif;
+  letter-spacing: -1px;
+}
+.bridge-error p {
+  color: #91adba;
+  font-size: 12px;
+}
+.path-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 7px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.path-divider::before,
+.path-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+.path-field {
+  text-align: left;
+}
+.empty-side .quiet {
+  display: block;
+}

@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-electron
+release
+outputs
+work
+coverage
+*.tsbuildinfo
+*.blockmap
+pnpm-lock.yaml

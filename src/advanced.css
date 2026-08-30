@@ -1,0 +1,148 @@
+.advanced-dock {
+  width: 260px;
+}
+.advanced-dock > button {
+  align-items: center;
+}
+.advanced-dock > button svg:last-child {
+  margin-left: auto;
+}
+.advanced-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.advanced-title button {
+  width: 26px;
+  height: 26px;
+  padding: 5px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  border-radius: 5px;
+}
+.advanced-title .eyebrow {
+  margin-top: 8px;
+}
+.advanced-content {
+  padding: 4px 5px 5px;
+}
+.advanced-content p {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+  margin: 7px 0 12px;
+}
+.advanced-action,
+.secondary-action {
+  width: 100%;
+  justify-content: center;
+}
+.secondary-action {
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 10px;
+}
+.toggle-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.toggle-row input {
+  position: absolute;
+  opacity: 0;
+}
+.toggle-row i {
+  width: 28px;
+  height: 16px;
+  border-radius: 10px;
+  background: var(--line);
+  position: relative;
+}
+.toggle-row i::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: 0.15s;
+}
+.toggle-row input:checked + i {
+  background: var(--accent);
+}
+.toggle-row input:checked + i::after {
+  left: 15px;
+  background: var(--onaccent);
+}
+.runtime-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+}
+.runtime-row b {
+  font-size: 9px;
+  color: var(--accent);
+}
+.runtime-row button {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 9px;
+}
+.env-manager-addon {
+  position: absolute;
+  z-index: 4;
+  top: 48px;
+  right: 284px;
+  width: 250px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel2);
+  box-shadow: 0 15px 50px #0006;
+}
+.env-manager-addon .runtime-select {
+  width: 100%;
+  margin: 10px 0 7px;
+}
+.env-manager-addon p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.named-env {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  margin-top: 7px;
+}
+.named-env .field {
+  margin: 0;
+}
+.named-env .primary {
+  padding: 7px 10px;
+  font-size: 10px;
+}
+.env-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-style: normal;
+  font-size: 8px;
+}

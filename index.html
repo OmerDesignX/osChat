@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' file: data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' file: data: oscode-media:; media-src 'self' file: data: blob: oscode-media:; worker-src 'self' blob:; connect-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/src/assets/oschat-icon.png" />
+    <meta
+      name="description"
+      content="osChat — a private, local-first AI chat and productivity workspace"
+    />
+    <title>osChat</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

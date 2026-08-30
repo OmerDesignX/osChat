@@ -1,0 +1,30 @@
+* text=auto eol=lf
+
+# Legacy Windows command scripts retain Windows line endings.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# PowerShell supports LF on Windows, macOS, and Linux. Keeping it LF avoids
+# platform-dependent rewrites when these cross-platform scripts are staged.
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+
+# Binary assets are never line-ending normalized.
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.dmg binary
+*.deb binary
+*.snap binary
+*.exe binary
+*.dll binary
+*.node binary
+*.gguf binary
+*.safetensors binary

@@ -1,0 +1,15 @@
+allowBuilds:
+  "@microsoft/winappcli": true
+  core-js: false
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  node-pty: true
+onlyBuiltDependencies:
+  - "@microsoft/winappcli"
+  - electron
+  - electron-winstaller
+  - esbuild
+  - node-pty
+overrides:
+  dompurify: 3.4.13
