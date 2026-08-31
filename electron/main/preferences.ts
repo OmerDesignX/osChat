@@ -2,7 +2,7 @@ import path from "node:path";
 import type { EditorPreferences } from "../types.js";
 
 export const defaultPreferences: EditorPreferences = {
-  version: 12,
+  version: 13,
   theme: "dark",
   locale: "en",
   sidebarSide: "left",
@@ -24,6 +24,7 @@ export const defaultPreferences: EditorPreferences = {
   aiWebAccess: false,
   aiContextLimit: 262144,
   aiHardware: "auto",
+  aiThinkingEnabled: true,
   suggestions: true,
   wordWrap: false,
   proseWrap: true,
@@ -41,7 +42,7 @@ export function validPreferences(value: unknown): EditorPreferences {
   const input = value as Partial<EditorPreferences>;
   const legacy = value as { aiAllowEdits?: unknown; theme?: unknown };
   return {
-    version: 12,
+    version: 13,
     theme:
       input.theme === "blue-dark" || input.theme === "blue-light"
         ? input.theme
@@ -117,6 +118,10 @@ export function validPreferences(value: unknown): EditorPreferences {
     aiHardware: ["auto", "cpu", "gpu"].includes(String(input.aiHardware))
       ? (input.aiHardware as EditorPreferences["aiHardware"])
       : "auto",
+    aiThinkingEnabled:
+      typeof input.aiThinkingEnabled === "boolean"
+        ? input.aiThinkingEnabled
+        : true,
     suggestions:
       typeof input.suggestions === "boolean" ? input.suggestions : true,
     wordWrap: typeof input.wordWrap === "boolean" ? input.wordWrap : false,

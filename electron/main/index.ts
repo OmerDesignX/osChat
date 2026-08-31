@@ -5194,6 +5194,10 @@ if (ownsSingleInstance)
         return python;
       },
       status: (message) => broadcastToRenderers("ai:status", message),
+      modelOutput: (output) => {
+        if (aiExecutionOwner && !aiExecutionOwner.isDestroyed())
+          aiExecutionOwner.send("ai:model-output", output);
+      },
       checkpoint: (root, relative, before) =>
         saveHistoryStore.record(root, relative, before, "agent").then(() => {}),
       action: (action) => {

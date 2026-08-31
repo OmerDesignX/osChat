@@ -29,6 +29,7 @@ test("accepts versioned local editor preferences", () => {
       aiWebAccess: true,
       aiContextLimit: 16384,
       aiHardware: "gpu",
+      aiThinkingEnabled: false,
       suggestions: false,
       wordWrap: true,
       proseWrap: false,
@@ -42,7 +43,7 @@ test("accepts versioned local editor preferences", () => {
       telemetry: true,
     }),
     {
-      version: 12,
+      version: 13,
       theme: "blue-dark",
       locale: "ar",
       sidebarSide: "right",
@@ -61,6 +62,7 @@ test("accepts versioned local editor preferences", () => {
       aiWebAccess: true,
       aiContextLimit: 16384,
       aiHardware: "gpu",
+      aiThinkingEnabled: false,
       suggestions: false,
       wordWrap: true,
       proseWrap: false,
@@ -112,6 +114,15 @@ test("new projects use the wider file tree and migrate the old default width", (
   assert.equal(
     validPreferences({ version: 11, sidebarWidth: 360 }).sidebarWidth,
     360,
+  );
+});
+
+test("enables model thinking by default and preserves an explicit choice", () => {
+  assert.equal(defaultPreferences.aiThinkingEnabled, true);
+  assert.equal(validPreferences({}).aiThinkingEnabled, true);
+  assert.equal(
+    validPreferences({ aiThinkingEnabled: false }).aiThinkingEnabled,
+    false,
   );
 });
 

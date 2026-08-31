@@ -110,6 +110,14 @@ export function isTrustedOllamaDownloadUrl(rawUrl: string) {
   }
 }
 
+export function shouldRetryLlamaOnCpu(
+  platform: NodeJS.Platform,
+  arch: string,
+  hardware: AiInferenceHardware,
+) {
+  return platform === "darwin" && arch === "x64" && hardware === "auto";
+}
+
 function cleanOllamaModelName(rawValue: unknown) {
   const name = cleanText(rawValue, 200).trim();
   if (!name || !/^[A-Za-z0-9._:/-]{1,200}$/.test(name))
@@ -276,6 +284,7 @@ type ChatRequest = {
   terminalMode: AiTerminalMode;
   contextLimit: number;
   hardware: AiInferenceHardware;
+  thinkingEnabled: boolean;
   contextSummary: string;
   fileAccess: boolean;
   webAccess: boolean;
@@ -305,6 +314,12 @@ type ServiceOptions = {
   projectRunStopped?: () => void;
   projectRunBusy?: () => boolean;
   status: (message: string) => void;
+  modelOutput?: (output: {
+    chatId: string;
+    phase: "reasoning" | "answer";
+    delta: string;
+    reset?: boolean;
+  }) => void;
   action?: (action: AiActionEntry) => void;
   checkpoint?: (
     root: string,
@@ -1853,6 +1868,8 @@ export class LocalAiService {
   private mlxPending:
     | {
         id: string;
+        chatId: string;
+        thinkingEnabled: boolean;
         resolve: (result: {
           code: number | null;
           output: string;
@@ -1887,6 +1904,20 @@ export class LocalAiService {
     this.secure = options.secureStore || new SecureDataStore(options.userData);
     this.history = new AiHistoryStore(options.userData, this.secure);
     this.agentState = new AgentStateStore(options.userData, this.secure);
+  }
+  private publishModelOutput(
+    chatId: string,
+    phase: "reasoning" | "answer",
+    delta: string,
+    reset = false,
+  ) {
+    if (!chatId || (!delta && !reset)) return;
+    this.options.modelOutput?.({
+      chatId,
+      phase,
+      delta: delta.slice(0, 16_000),
+      reset,
+    });
   }
 
   private get aiRoot() {
@@ -4931,6 +4962,7 @@ export class LocalAiService {
     chatId: string,
     hardware: AiInferenceHardware,
     maxOutputTokens = 4096,
+    enableThinking = true,
     privateMedia?: MaterializedAiMedia,
     projector?: string,
   ) {
@@ -4981,27 +5013,11 @@ export class LocalAiService {
           "ASSISTANT:",
         ].join("\n\n");
     const promptInput = prompt.slice(-1_500_000);
-    const promptBuffer = Buffer.from(promptInput, "utf8");
-    const promptSource =
-      process.platform === "win32"
-        ? `\\\\.\\pipe\\oscode-prompt-${process.pid}-${crypto.randomUUID()}`
-        : "/dev/stdin";
-    let promptServer: net.Server | null = null;
-    if (process.platform === "win32") {
-      promptServer = net.createServer((socket) => {
-        socket.on("error", () => undefined);
-        socket.end(promptBuffer, () => promptBuffer.fill(0));
-      });
-      await new Promise<void>((resolve, reject) => {
-        promptServer?.once("error", reject);
-        promptServer?.listen(promptSource, resolve);
-      });
-    }
     const inferenceArguments = [
       "-m",
       realModel,
       "--file",
-      promptSource,
+      process.platform === "win32" ? "__OSCHAT_PROMPT_PIPE__" : "/dev/stdin",
       "--n-predict",
       String(predictionLimit),
       "--ctx-size",
@@ -5041,65 +5057,152 @@ export class LocalAiService {
       )
         inferenceArguments.push("--split-mode", "layer");
     }
-    const child = spawn(realExecutable, inferenceArguments, {
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-      cwd: path.dirname(realExecutable),
-      env: {
-        ...(await this.llamaEnvironment(realExecutable)),
-        ...(process.platform === "win32"
-          ? {
-              Path: `${pythonDirectory};${(await this.llamaEnvironment(realExecutable)).Path || ""}`,
-            }
-          : {}),
-      },
-    });
-    this.worker = child;
-    if (process.platform === "win32") child.stdin.end();
-    else child.stdin.end(promptBuffer, () => promptBuffer.fill(0));
-    const output: Buffer[] = [];
-    const errors: Buffer[] = [];
-    let answerStarted = false;
-    let observed = "";
-    let outputCharacters = 0;
-    let nextProgressAt = 0;
-    child.stdout.on("data", (chunk: Buffer) => {
-      output.push(chunk);
-      const text = chunk.toString("utf8");
-      outputCharacters += text.length;
-      if (!answerStarted) observed = (observed + text).slice(-16_000);
-      if (
-        !answerStarted &&
-        (!qwenFamily || observed.toLowerCase().includes("</think>"))
-      ) {
-        answerStarted = true;
+    const llamaEnvironment = await this.llamaEnvironment(realExecutable);
+    const runAttempt = async (attemptArguments: string[]) => {
+      this.publishModelOutput(chatId, "reasoning", "", true);
+      const promptBuffer = Buffer.from(promptInput, "utf8");
+      const promptSource =
+        process.platform === "win32"
+          ? `\\\\.\\pipe\\oscode-prompt-${process.pid}-${crypto.randomUUID()}`
+          : "/dev/stdin";
+      let promptServer: net.Server | null = null;
+      if (process.platform === "win32") {
+        promptServer = net.createServer((socket) => {
+          socket.on("error", () => undefined);
+          socket.end(promptBuffer, () => promptBuffer.fill(0));
+        });
+        await new Promise<void>((resolve, reject) => {
+          promptServer?.once("error", reject);
+          promptServer?.listen(promptSource, resolve);
+        });
       }
-      const now = Date.now();
-      if (now < nextProgressAt) return;
-      nextProgressAt = now + 120;
-      this.options.status(
-        `${answerStarted ? "Answering" : "Reasoning locally"} · ~${Math.max(1, Math.ceil(outputCharacters / 4))} output tokens`,
+      const childArguments = attemptArguments.map((argument) =>
+        argument === "__OSCHAT_PROMPT_PIPE__" ? promptSource : argument,
       );
-    });
-    child.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
-    try {
-      const code = await new Promise<number | null>((resolve, reject) => {
-        child.once("error", reject);
-        child.once("close", resolve);
+      const child = spawn(realExecutable, childArguments, {
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+        cwd: path.dirname(realExecutable),
+        env: {
+          ...llamaEnvironment,
+          ...(process.platform === "win32"
+            ? {
+                Path: `${pythonDirectory};${llamaEnvironment.Path || ""}`,
+              }
+            : {}),
+        },
       });
-      if (code !== 0) {
-        const diagnostic = Buffer.concat(errors)
-          .toString("utf8")
-          .trim()
-          .slice(-1600);
-        throw new Error(publicModelError(diagnostic, code));
+      this.worker = child;
+      if (process.platform === "win32") child.stdin.end();
+      else child.stdin.end(promptBuffer, () => promptBuffer.fill(0));
+      const output: Buffer[] = [];
+      const errors: Buffer[] = [];
+      let answerStarted = !enableThinking;
+      let observed = "";
+      let streamedRaw = "";
+      let publishedReasoning = 0;
+      let publishedAnswer = 0;
+      let outputCharacters = 0;
+      let nextProgressAt = 0;
+      child.stdout.on("data", (chunk: Buffer) => {
+        output.push(chunk);
+        const text = chunk.toString("utf8");
+        streamedRaw += text;
+        if (enableThinking && qwenFamily) {
+          const lower = streamedRaw.toLowerCase();
+          const open = lower.indexOf("<think>");
+          const close = lower.indexOf("</think>");
+          const reasoningStart = open >= 0 ? open + "<think>".length : 0;
+          if (close >= reasoningStart) {
+            const reasoning = streamedRaw.slice(reasoningStart, close);
+            if (reasoning.length > publishedReasoning) {
+              this.publishModelOutput(
+                chatId,
+                "reasoning",
+                reasoning.slice(publishedReasoning),
+              );
+              publishedReasoning = reasoning.length;
+            }
+            const answer = streamedRaw.slice(close + "</think>".length);
+            if (answer.length > publishedAnswer) {
+              this.publishModelOutput(
+                chatId,
+                "answer",
+                answer.slice(publishedAnswer),
+              );
+              publishedAnswer = answer.length;
+            }
+          } else {
+            const reasoning = streamedRaw
+              .slice(reasoningStart)
+              .replace(/<\/?(?:t(?:h(?:i(?:n(?:k)?)?)?)?)?$/i, "");
+            if (reasoning.length > publishedReasoning) {
+              this.publishModelOutput(
+                chatId,
+                "reasoning",
+                reasoning.slice(publishedReasoning),
+              );
+              publishedReasoning = reasoning.length;
+            }
+          }
+        } else {
+          this.publishModelOutput(chatId, "answer", text);
+        }
+        outputCharacters += text.length;
+        if (!answerStarted) observed = (observed + text).slice(-16_000);
+        if (
+          !answerStarted &&
+          (!qwenFamily || observed.toLowerCase().includes("</think>"))
+        )
+          answerStarted = true;
+        const now = Date.now();
+        if (now < nextProgressAt) return;
+        nextProgressAt = now + 120;
+        this.options.status(
+          `${answerStarted ? "Answering" : "Reasoning locally"} · ~${Math.max(1, Math.ceil(outputCharacters / 4))} output tokens`,
+        );
+      });
+      child.stderr.on("data", (chunk: Buffer) => errors.push(chunk));
+      try {
+        const code = await new Promise<number | null>((resolve, reject) => {
+          child.once("error", reject);
+          child.once("close", resolve);
+        });
+        return {
+          code,
+          content: Buffer.concat(output).toString("utf8").trim(),
+          diagnostic: Buffer.concat(errors)
+            .toString("utf8")
+            .trim()
+            .slice(-1600),
+        };
+      } finally {
+        promptBuffer.fill(0);
+        promptServer?.close();
+        if (this.worker === child) this.worker = null;
       }
-      return Buffer.concat(output).toString("utf8").trim();
-    } finally {
-      promptBuffer.fill(0);
-      promptServer?.close();
-      if (this.worker === child) this.worker = null;
+    };
+    const attempts = [inferenceArguments];
+    if (shouldRetryLlamaOnCpu(process.platform, process.arch, hardware))
+      attempts.push([
+        ...inferenceArguments,
+        "--gpu-layers",
+        "0",
+        "--no-kv-offload",
+      ]);
+    let lastDiagnostic = "";
+    let lastCode: number | null = null;
+    for (const [index, attempt] of attempts.entries()) {
+      const result = await runAttempt(attempt);
+      if (result.code === 0) return result.content;
+      lastDiagnostic = result.diagnostic;
+      lastCode = result.code;
+      if (index + 1 < attempts.length)
+        this.options.status(
+          "Intel GPU startup failed; retrying the model locally on CPU…",
+        );
     }
+    throw new Error(publicModelError(lastDiagnostic, lastCode));
   }
   private parseCalls(raw: unknown): ToolCall[] {
     if (!Array.isArray(raw)) return [];
@@ -5130,7 +5233,11 @@ export class LocalAiService {
       ];
     });
   }
-  private reportMlxProgress(line: string) {
+  private reportMlxProgress(
+    line: string,
+    chatId = this.mlxPending?.chatId || "",
+    thinkingEnabled = this.mlxPending?.thinkingEnabled ?? true,
+  ) {
     if (!line.startsWith("__OSCODE_PROGRESS__")) return false;
     try {
       const progress = JSON.parse(line.slice("__OSCODE_PROGRESS__".length)) as {
@@ -5139,6 +5246,7 @@ export class LocalAiService {
         phase?: unknown;
         input_tokens?: unknown;
         input_total?: unknown;
+        delta?: unknown;
       };
       if (progress.phase === "prompt") {
         const inputTokens = Math.max(0, Number(progress.input_tokens) || 0);
@@ -5161,8 +5269,15 @@ export class LocalAiService {
       }
       const tokens = Math.max(1, Number(progress.tokens) || 1);
       const speed = Number(progress.tps);
+      const phase = progress.phase === "answer" ? "answer" : "reasoning";
+      const delta =
+        typeof progress.delta === "string"
+          ? progress.delta.replace(/<\/?think>/gi, "")
+          : "";
+      if (delta && (phase === "answer" || thinkingEnabled))
+        this.publishModelOutput(chatId, phase, delta);
       this.options.status(
-        `${progress.phase === "answer" ? "Answering" : "Reasoning locally"} · ${tokens} output tokens${Number.isFinite(speed) && speed > 0 ? ` · ${speed.toFixed(1)} tok/s` : ""}`,
+        `${phase === "answer" ? "Answering" : "Reasoning locally"} · ${tokens} output tokens${Number.isFinite(speed) && speed > 0 ? ` · ${speed.toFixed(1)} tok/s` : ""}`,
       );
     } catch {
       // Ignore malformed progress without losing the inference result.
@@ -5175,6 +5290,7 @@ export class LocalAiService {
     messages: unknown[],
     tools: unknown[],
     enableThinking: boolean,
+    chatId: string,
   ) {
     const realModel = await fs.realpath(model);
     let child = this.mlxWorker;
@@ -5265,7 +5381,7 @@ for line in sys.stdin:
   for response in stream_generate(m,t,prompt=prompt_delta,max_tokens=max_tokens,prompt_cache=generation_cache,prompt_progress_callback=prompt_progress):
    parts.append(response.text)
    phase='answer' if not r.get('enable_thinking',True) or '</think>' in ''.join(parts[-256:]).lower() else 'reasoning'
-   sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':response.generation_tokens,'tps':response.generation_tps,'phase':phase})+'\\n')
+   sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':response.generation_tokens,'tps':response.generation_tps,'phase':phase,'delta':response.text})+'\\n')
    sys.stderr.flush()
   sys.stdout.write('__OSCODE_RESULT__'+json.dumps({'id':request_id,'content':''.join(parts)})+'\\n')
  except Exception as error:
@@ -5343,12 +5459,18 @@ for line in sys.stdin:
       throw new Error("The shared MLX worker is already processing a request");
     this.mlxWorkerErrors = "";
     const id = crypto.randomUUID();
+    this.publishModelOutput(chatId, "reasoning", "", true);
     return new Promise<{
       code: number | null;
       output: string;
       error: string;
     }>((resolve) => {
-      this.mlxPending = { id, resolve };
+      this.mlxPending = {
+        id,
+        chatId,
+        thinkingEnabled: enableThinking,
+        resolve,
+      };
       child.stdin.write(
         `${JSON.stringify({ id, messages, tools, enable_thinking: enableThinking, max_tokens: enableThinking ? 1024 : 4096 })}\n`,
         (error) => {
@@ -5365,9 +5487,11 @@ for line in sys.stdin:
     messages: unknown[],
     tools: unknown[],
     enableThinking: boolean,
+    chatId: string,
     privateMedia: MaterializedAiMedia,
   ) {
     const realModel = await fs.realpath(model);
+    this.publishModelOutput(chatId, "reasoning", "", true);
     const worker = `import json,os,sys,traceback
 os.environ['HF_HUB_OFFLINE']='1'
 os.environ['TRANSFORMERS_OFFLINE']='1'
@@ -5388,7 +5512,7 @@ try:
   parts.append(response.text)
   text=''.join(parts)
   phase='answer' if not r.get('enable_thinking',True) or '</think>' in text.lower() else 'reasoning'
-  sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':getattr(response,'generation_tokens',len(text)//4),'tps':getattr(response,'generation_tps',0),'phase':phase})+'\\n')
+  sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':getattr(response,'generation_tokens',len(text)//4),'tps':getattr(response,'generation_tps',0),'phase':phase,'delta':response.text})+'\\n')
   sys.stderr.flush()
  sys.stdout.write(json.dumps({'content':''.join(parts)}))
 except Exception as error:
@@ -5413,7 +5537,7 @@ except Exception as error:
       const lines = progressBuffer.split(/\r?\n/);
       progressBuffer = lines.pop() || "";
       for (const line of lines)
-        if (!this.reportMlxProgress(line))
+        if (!this.reportMlxProgress(line, chatId, enableThinking))
           errors.push(Buffer.from(`${line}\n`));
     });
     const media = (kind: "image" | "audio" | "video") =>
@@ -5436,7 +5560,10 @@ except Exception as error:
         child.once("error", reject);
         child.once("close", resolve);
       });
-      if (progressBuffer && !this.reportMlxProgress(progressBuffer))
+      if (
+        progressBuffer &&
+        !this.reportMlxProgress(progressBuffer, chatId, enableThinking)
+      )
         errors.push(Buffer.from(progressBuffer));
       return {
         code,
@@ -5454,6 +5581,7 @@ except Exception as error:
     controller: AbortController,
     enableThinking: boolean,
   ): Promise<ModelReply> {
+    this.publishModelOutput(request.chatId, "reasoning", "", true);
     const response = await fetch(`${OLLAMA_API_ROOT}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -5498,6 +5626,10 @@ except Exception as error:
             : "";
       content += nextContent;
       thinking += nextThinking;
+      if (enableThinking && nextThinking)
+        this.publishModelOutput(request.chatId, "reasoning", nextThinking);
+      if (nextContent)
+        this.publishModelOutput(request.chatId, "answer", nextContent);
       if (Array.isArray(event.message?.tool_calls))
         for (const call of event.message.tool_calls) {
           const key = JSON.stringify(call);
@@ -5630,6 +5762,7 @@ except Exception as error:
             request.chatId,
             request.hardware,
             enableThinking ? 1024 : 4096,
+            enableThinking,
             privateMedia,
             request.capabilities.projector,
           );
@@ -5709,7 +5842,7 @@ if engine=='mlx':
  for response in stream_generate(m,t,prompt=p,max_tokens=max_tokens,prompt_progress_callback=prompt_progress):
   parts.append(response.text)
   phase='answer' if not enable_thinking or '</think>' in ''.join(parts[-256:]).lower() else 'reasoning'
-  sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':response.generation_tokens,'tps':response.generation_tps,'phase':phase})+'\\n')
+  sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':response.generation_tokens,'tps':response.generation_tps,'phase':phase,'delta':response.text})+'\\n')
   sys.stderr.flush()
  out=''.join(parts)
 else:
@@ -5735,12 +5868,13 @@ else:
   parts.append(text)
   generated_tokens+=max(1,len(t.encode(text,add_special_tokens=False)))
   phase='answer' if not enable_thinking or '</think>' in ''.join(parts[-256:]).lower() else 'reasoning'
-  sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':generated_tokens,'phase':phase})+'\n')
+  sys.stderr.write('__OSCODE_PROGRESS__'+json.dumps({'tokens':generated_tokens,'phase':phase,'delta':text})+'\n')
   sys.stderr.flush()
  thread.join()
  out=''.join(parts)
 json.dump({'content':out},sys.stdout)`;
       const runWorker = async () => {
+        this.publishModelOutput(request.chatId, "reasoning", "", true);
         const child = spawn(python, ["-c", worker], {
           stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
@@ -5769,6 +5903,7 @@ json.dump({'content':out},sys.stdout)`;
                 phase?: unknown;
                 input_tokens?: unknown;
                 input_total?: unknown;
+                delta?: unknown;
               };
               if (progress.phase === "prompt") {
                 const inputTokens = Math.max(
@@ -5786,8 +5921,16 @@ json.dump({'content':out},sys.stdout)`;
               }
               const tokens = Math.max(1, Number(progress.tokens) || 1);
               const speed = Number(progress.tps);
+              const phase =
+                progress.phase === "answer" ? "answer" : "reasoning";
+              const delta =
+                typeof progress.delta === "string"
+                  ? progress.delta.replace(/<\/?think>/gi, "")
+                  : "";
+              if (delta && (phase === "answer" || enableThinking))
+                this.publishModelOutput(request.chatId, phase, delta);
               this.options.status(
-                `${progress.phase === "answer" ? "Answering" : "Reasoning locally"} · ${tokens} output tokens${Number.isFinite(speed) && speed > 0 ? ` · ${speed.toFixed(1)} tok/s` : ""}`,
+                `${phase === "answer" ? "Answering" : "Reasoning locally"} · ${tokens} output tokens${Number.isFinite(speed) && speed > 0 ? ` · ${speed.toFixed(1)} tok/s` : ""}`,
               );
             } catch {
               // Ignore malformed progress without losing the inference result.
@@ -5827,6 +5970,7 @@ json.dump({'content':out},sys.stdout)`;
                 inferenceMessages,
                 tools,
                 enableThinking,
+                request.chatId,
                 privateMedia,
               )
             : await this.mlxReply(
@@ -5835,6 +5979,7 @@ json.dump({'content':out},sys.stdout)`;
                 inferenceMessages,
                 tools,
                 enableThinking,
+                request.chatId,
               )
           : await runWorker();
       if (result.code !== 0) {
@@ -5899,6 +6044,7 @@ json.dump({'content':out},sys.stdout)`;
       hardware: ["auto", "cpu", "gpu"].includes(String(input.hardware))
         ? (input.hardware as AiInferenceHardware)
         : "auto",
+      thinkingEnabled: input.thinkingEnabled !== false,
       contextSummary:
         typeof input.contextSummary === "string"
           ? input.contextSummary.slice(-64_000)
@@ -6400,7 +6546,7 @@ json.dump({'content':out},sys.stdout)`;
           request,
           messages,
           tools,
-          step === 0 && !continued,
+          request.thinkingEnabled && step === 0 && !continued,
         );
       }
       if (requestEpoch !== this.cancellationEpoch)

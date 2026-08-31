@@ -234,6 +234,7 @@ export function App() {
   const [aiComputerAccess, setAiComputerAccess] = useState(false);
   const [aiContextLimit, setAiContextLimit] = useState(262_144);
   const [aiHardware, setAiHardware] = useState<AiInferenceHardware>("auto");
+  const [aiThinkingEnabled, setAiThinkingEnabled] = useState(true);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
   const [updateStatus, setUpdateStatus] = useState(emptyUpdate);
   const [aiAttention, setAiAttention] = useState<AiAttention | null>(null);
@@ -372,6 +373,7 @@ export function App() {
         setAiWebAccess(preferences.aiWebAccess);
         setAiContextLimit(preferences.aiContextLimit);
         setAiHardware(preferences.aiHardware);
+        setAiThinkingEnabled(preferences.aiThinkingEnabled);
         setAutoUpdateEnabled(preferences.autoUpdateEnabled);
         setUpdateStatus(status);
         await Promise.all([
@@ -447,6 +449,7 @@ export function App() {
           aiWebAccess,
           aiContextLimit,
           aiHardware,
+          aiThinkingEnabled,
           autoUpdateEnabled,
           autoUpdatePromptAnswered: true,
           aiVisible: true,
@@ -468,6 +471,7 @@ export function App() {
     aiWebAccess,
     aiContextLimit,
     aiHardware,
+    aiThinkingEnabled,
     autoUpdateEnabled,
   ]);
   useEffect(() => {
@@ -966,6 +970,7 @@ export function App() {
       computerAccess={aiComputerAccess}
       contextLimit={aiContextLimit}
       hardwarePreference={aiHardware}
+      thinkingEnabled={aiThinkingEnabled}
       width={0}
       side="right"
       projectName="osChat Workspace"
@@ -1744,6 +1749,8 @@ export function App() {
           setAiBrowserAccess={setAiBrowserAccess}
           aiComputerAccess={aiComputerAccess}
           setAiComputerAccess={setAiComputerAccess}
+          aiThinkingEnabled={aiThinkingEnabled}
+          setAiThinkingEnabled={setAiThinkingEnabled}
           autoUpdateEnabled={autoUpdateEnabled}
           setAutoUpdateEnabled={async (value) => {
             setAutoUpdateEnabled(value);
@@ -1789,6 +1796,8 @@ type SettingsProps = {
   setAiBrowserAccess: (value: boolean) => void;
   aiComputerAccess: boolean;
   setAiComputerAccess: (value: boolean) => void;
+  aiThinkingEnabled: boolean;
+  setAiThinkingEnabled: (value: boolean) => void;
   autoUpdateEnabled: boolean;
   setAutoUpdateEnabled: (value: boolean) => Promise<void>;
   updateStatus: AppUpdateStatus;
@@ -1901,6 +1910,12 @@ function SettingsDialog(props: SettingsProps) {
           )}
           {props.section === "models" && (
             <div className="settings-section">
+              <SettingToggle
+                label="Show model thinking"
+                detail="Let compatible osChat and custom local models reason and stream their working text in the conversation."
+                value={props.aiThinkingEnabled}
+                set={props.setAiThinkingEnabled}
+              />
               <SettingGroup
                 title="osChat models"
                 description="Download one verified tier at a time from the shared osCode model repository."

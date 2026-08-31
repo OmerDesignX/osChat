@@ -14240,6 +14240,26 @@ button > svg * {
   margin-bottom: 0;
 }
 
+.oschat-app .ai-live-model-output {
+  margin-block: 8px 18px;
+}
+
+.oschat-app .ai-live-model-output .ai-message-author small {
+  margin-inline-start: 8px;
+  color: var(--accent);
+  font-size: var(--oschat-body-size);
+  font-weight: 650;
+}
+
+.oschat-app .ai-live-model-output > .ai-message-rich-content {
+  padding: var(--oschat-content-pad-block) var(--oschat-content-pad-inline);
+}
+
+.oschat-app .ai-live-reasoning > .ai-message-rich-content {
+  max-height: min(34vh, 320px);
+  overflow-y: auto;
+}
+
 .oschat-app .ai-message .ai-response-actions > .ai-action-timeline.compact {
   gap: 10px;
   padding: var(--oschat-content-pad-block) var(--oschat-content-pad-inline);

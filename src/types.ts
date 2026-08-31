@@ -5,7 +5,7 @@ export type TreeEntry = {
   children?: TreeEntry[];
 };
 export type EditorPreferences = {
-  version: 12;
+  version: 13;
   theme: "dark" | "blue-dark" | "blue-light";
   locale: "en" | "ar";
   sidebarSide: "left" | "right";
@@ -24,6 +24,7 @@ export type EditorPreferences = {
   aiWebAccess: boolean;
   aiContextLimit: number;
   aiHardware: AiInferenceHardware;
+  aiThinkingEnabled: boolean;
   suggestions: boolean;
   wordWrap: boolean;
   proseWrap: boolean;
@@ -85,6 +86,12 @@ export type AiPipelineState = {
   label: string;
   position: number;
   activeProject: string;
+};
+export type AiModelOutput = {
+  chatId: string;
+  phase: "reasoning" | "answer";
+  delta: string;
+  reset?: boolean;
 };
 export type OllamaCliStatus = {
   installed: boolean;
@@ -560,6 +567,7 @@ declare global {
         resumePermission: boolean;
         contextLimit: number;
         hardware: AiInferenceHardware;
+        thinkingEnabled: boolean;
         contextSummary: string;
         goal: string;
       }): Promise<AiChatResponse>;
@@ -574,6 +582,7 @@ declare global {
       onAgentActivity(cb: (activity: AgentActivity) => void): () => void;
       onAiPipelineState(cb: (state: AiPipelineState) => void): () => void;
       onAiStatus(cb: (status: string) => void): () => void;
+      onAiModelOutput(cb: (output: AiModelOutput) => void): () => void;
       onAiAction(cb: (action: AiActionEntry) => void): () => void;
       setSpellcheck(enabled: boolean): Promise<boolean>;
       onSpellcheckReplaceAll(

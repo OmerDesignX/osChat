@@ -19,9 +19,17 @@ import {
   requiredProjectImageDownloadCount,
   requiresInteractiveChatContent,
   requiresProjectMutation,
+  shouldRetryLlamaOnCpu,
   privateAttachmentExternalDetail,
   toolResultForModel,
 } from "../dist-electron/main/ai.js";
+
+test("automatic Intel macOS inference can retry without Metal", () => {
+  assert.equal(shouldRetryLlamaOnCpu("darwin", "x64", "auto"), true);
+  assert.equal(shouldRetryLlamaOnCpu("darwin", "x64", "cpu"), false);
+  assert.equal(shouldRetryLlamaOnCpu("darwin", "arm64", "auto"), false);
+  assert.equal(shouldRetryLlamaOnCpu("win32", "x64", "auto"), false);
+});
 import {
   materializeAiMedia,
   prepareAiAttachments,
@@ -728,8 +736,12 @@ test("every agent project deletion requires a fresh one-time Trash approval", as
 
 test("Ollama streams reasoning, answer progress, and native tool calls", async (t) => {
   const statuses = [];
+  const modelOutput = [];
   const { base, service } = await fixture({
     status: (value) => statuses.push(value),
+    serviceOptions: {
+      modelOutput: (value) => modelOutput.push(value),
+    },
   });
   t.after(() => fs.rm(base, { recursive: true, force: true }));
   const originalFetch = globalThis.fetch;
@@ -810,6 +822,26 @@ test("Ollama streams reasoning, answer progress, and native tool calls", async (
     statuses.some((value) => /Reasoning locally.*4 output tokens/.test(value)),
   );
   assert.ok(statuses.some((value) => /Answering/.test(value)));
+  assert.deepEqual(modelOutput, [
+    {
+      chatId: "chat",
+      phase: "reasoning",
+      delta: "",
+      reset: true,
+    },
+    {
+      chatId: "chat",
+      phase: "reasoning",
+      delta: "Inspect the project. ",
+      reset: false,
+    },
+    {
+      chatId: "chat",
+      phase: "answer",
+      delta: "I found the next step.",
+      reset: false,
+    },
+  ]);
 });
 
 test("permissions and autonomous execution are identical across local engines", async (t) => {

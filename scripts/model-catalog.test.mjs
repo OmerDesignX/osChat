@@ -6,6 +6,7 @@ import {
   modelVariants,
 } from "../dist-electron/main/model-catalog.js";
 import {
+  defaultBuiltInContext,
   localAiEngine,
   mlxRuntimeSupported,
 } from "../dist-electron/main/bundled-models.js";
@@ -18,6 +19,12 @@ test("runtime selection keeps MLX on supported Apple silicon and GGUF everywhere
   assert.equal(localAiEngine("darwin", "x64", "25.0.0"), "llamacpp");
   assert.equal(localAiEngine("win32", "x64", "10.0.0"), "llamacpp");
   assert.equal(localAiEngine("linux", "x64", "6.8.0"), "llamacpp");
+});
+
+test("GGUF models start with a memory-safe context while MLX retains its full context", () => {
+  assert.equal(defaultBuiltInContext("llamacpp"), 8_192);
+  assert.equal(defaultBuiltInContext("llamacpp", 4_096), 4_096);
+  assert.equal(defaultBuiltInContext("mlx"), 262_144);
 });
 
 test("the public model catalogue maps one selectable tier per runtime", () => {

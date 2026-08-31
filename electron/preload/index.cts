@@ -163,6 +163,11 @@ contextBridge.exposeInMainWorld("oscode", {
     ipcRenderer.on("ai:status", listener);
     return () => ipcRenderer.removeListener("ai:status", listener);
   },
+  onAiModelOutput: (callback: (output: unknown) => void) => {
+    const listener = (_event: unknown, output: unknown) => callback(output);
+    ipcRenderer.on("ai:model-output", listener);
+    return () => ipcRenderer.removeListener("ai:model-output", listener);
+  },
   onAiAction: (callback: (action: unknown) => void) => {
     const listener = (_event: unknown, action: unknown) => callback(action);
     ipcRenderer.on("ai:action", listener);

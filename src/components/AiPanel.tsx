@@ -18,6 +18,7 @@ import type {
   AiInferenceHardware,
   AiHistoryEntry,
   AiModel,
+  AiModelOutput,
   AiModelTier,
   AiPipelineState,
   AiPermissionKind,
@@ -41,6 +42,7 @@ type Props = {
   computerAccess: boolean;
   contextLimit: number;
   hardwarePreference: AiInferenceHardware;
+  thinkingEnabled: boolean;
   width: number;
   side: "left" | "right";
   projectName: string;
@@ -310,6 +312,7 @@ function inferredTier(model: AiModel) {
 }
 
 function osCodeGgufTier(model: AiModel): Exclude<AiModelTier, "custom"> | null {
+  if (model.engine !== "llamacpp") return null;
   if (
     ["bundled", "downloaded", "available"].includes(model.source) &&
     model.tier &&
@@ -331,7 +334,18 @@ function recommendedActiveContext(
   model: AiModel,
   _hardware: AiHardwareProfile | null,
 ) {
-  if (osCodeGgufTier(model)) return model.contextLimit || 262_144;
+  if (osCodeGgufTier(model))
+    return Math.min(
+      model.preferredContext || 8_192,
+      model.contextLimit || 8_192,
+    );
+  if (
+    model.engine === "mlx" &&
+    ["bundled", "downloaded", "available"].includes(model.source) &&
+    model.tier &&
+    model.tier !== "custom"
+  )
+    return model.contextLimit || 262_144;
   return Math.min(model.preferredContext || 8_192, model.contextLimit || 8_192);
 }
 
@@ -380,6 +394,7 @@ export function AiPanel({
   computerAccess,
   contextLimit,
   hardwarePreference,
+  thinkingEnabled,
   width,
   side,
   projectName,
@@ -424,6 +439,11 @@ export function AiPanel({
   const [attachments, setAttachments] = useState<AiChatAttachment[]>([]);
   const [source, setSource] = useState("");
   const [busy, setBusy] = useState(false);
+  const [liveModelOutput, setLiveModelOutput] = useState<{
+    chatId: string;
+    reasoning: string;
+    answer: string;
+  }>({ chatId: "", reasoning: "", answer: "" });
   const [cudaBusy, setCudaBusy] = useState(false);
   const [downloadingTier, setDownloadingTier] = useState<
     Exclude<AiModelTier, "custom"> | ""
@@ -701,6 +721,7 @@ export function AiPanel({
     setInput("");
     setAttachments([]);
     setPermissionRequest(null);
+    setLiveModelOutput({ chatId: "", reasoning: "", answer: "" });
     setGoalMenuOpen(false);
     setContextSummary(chat.contextSummary);
     setUsage({ used: 0, limit: contextLimit, compacted: false });
@@ -719,6 +740,27 @@ export function AiPanel({
   useEffect(() => {
     void refreshModels().catch(() => undefined);
     const offStatus = window.oscode.onAiStatus(setStatus);
+    const offModelOutput = window.oscode.onAiModelOutput(
+      (output: AiModelOutput) => {
+        if (output.chatId !== chatIdRef.current) return;
+        setLiveModelOutput((current) => {
+          const base =
+            output.reset || current.chatId !== output.chatId
+              ? { chatId: output.chatId, reasoning: "", answer: "" }
+              : current;
+          if (!output.delta) return base;
+          return output.phase === "reasoning"
+            ? {
+                ...base,
+                reasoning: `${base.reasoning}${output.delta}`.slice(-40_000),
+              }
+            : {
+                ...base,
+                answer: `${base.answer}${output.delta}`.slice(-100_000),
+              };
+        });
+      },
+    );
     const offAction = window.oscode.onAiAction((action) => {
       if (action.chatId !== chatIdRef.current) return;
       const next = mergeActionEntries(liveActionsRef.current, [action]);
@@ -728,6 +770,7 @@ export function AiPanel({
     const offPipeline = window.oscode.onAiPipelineState(setPipelineState);
     return () => {
       offStatus();
+      offModelOutput();
       offAction();
       offPipeline();
     };
@@ -1343,6 +1386,11 @@ export function AiPanel({
     stoppingRef.current = false;
     setBusy(true);
     busyRef.current = true;
+    setLiveModelOutput({
+      chatId: executionChatId,
+      reasoning: "",
+      answer: "",
+    });
     if (queueId) await window.oscode.updateAiQueue(queueId, "running");
     let failed = false;
     try {
@@ -1365,6 +1413,7 @@ export function AiPanel({
         resumePermission: Boolean(continuation),
         contextLimit,
         hardware: hardwarePreference,
+        thinkingEnabled,
         contextSummary: requestSummary,
         goal: activeGoal?.text || "",
       });
@@ -1529,6 +1578,7 @@ export function AiPanel({
         );
       setBusy(false);
       busyRef.current = false;
+      setLiveModelOutput({ chatId: "", reasoning: "", answer: "" });
       steeringRef.current = false;
       stoppingRef.current = false;
       await refreshAgentState().catch(() => undefined);
@@ -1551,6 +1601,7 @@ export function AiPanel({
     const next = [...chat.messages, userMessage];
     setBusy(true);
     busyRef.current = true;
+    setLiveModelOutput({ chatId: chat.id, reasoning: "", answer: "" });
     setStatus(`Running scheduled work in ${chat.title}`);
     await window.oscode.updateAiQueue(item.id, "running");
     let failed = false;
@@ -1570,6 +1621,7 @@ export function AiPanel({
         resumePermission: false,
         contextLimit,
         hardware: hardwarePreference,
+        thinkingEnabled,
         contextSummary: chat.contextSummary,
         goal,
       });
@@ -1617,6 +1669,7 @@ export function AiPanel({
       );
       setBusy(false);
       busyRef.current = false;
+      setLiveModelOutput({ chatId: "", reasoning: "", answer: "" });
       setStatus(
         failed ? "Scheduled work needs attention" : "Ready · local only",
       );
@@ -3232,7 +3285,7 @@ export function AiPanel({
                 </>
               )}
             </header>
-            {message.thinking && (
+            {thinkingEnabled && message.thinking && (
               <details
                 className="ai-reasoning"
                 open={messageIndex === messages.length - 1}
@@ -3303,6 +3356,44 @@ export function AiPanel({
             )}
           </article>
         ))}
+        {busy &&
+          liveModelOutput.chatId === chatId &&
+          (liveModelOutput.reasoning || liveModelOutput.answer) && (
+            <article
+              className="ai-message assistant ai-live-model-output"
+              aria-live="polite"
+            >
+              <header className="ai-message-author">
+                <i>O</i>
+                <span>
+                  {selectedModel && osCodeGgufTier(selectedModel)
+                    ? assistantName
+                    : "Custom Model"}
+                </span>
+                <small>Live</small>
+              </header>
+              {thinkingEnabled && liveModelOutput.reasoning && (
+                <details className="ai-reasoning ai-live-reasoning" open>
+                  <summary>
+                    <span>
+                      <FeatherIcon icon="cpu" size="14" />
+                      Model thinking
+                    </span>
+                    <small>Live</small>
+                  </summary>
+                  <AiMessageContent
+                    content={publicAssistantText(liveModelOutput.reasoning)}
+                  />
+                </details>
+              )}
+              {liveModelOutput.answer && (
+                <AiMessageContent
+                  content={publicAssistantText(liveModelOutput.answer)}
+                  onOpenArtifact={onOpenArtifact}
+                />
+              )}
+            </article>
+          )}
         {busy && (
           <div className="ai-live-work" role="status" aria-live="polite">
             <div className="ai-thinking">

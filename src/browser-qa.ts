@@ -109,7 +109,7 @@ export function createBrowserQaBridge(): Window["oscode"] {
     },
   ];
   let preferences: EditorPreferences = {
-    version: 12,
+    version: 13,
     theme: "dark",
     locale: "en",
     sidebarSide: "left",
@@ -128,6 +128,7 @@ export function createBrowserQaBridge(): Window["oscode"] {
     aiWebAccess: false,
     aiContextLimit: 262_144,
     aiHardware: "auto",
+    aiThinkingEnabled: true,
     suggestions: true,
     wordWrap: false,
     proseWrap: true,
@@ -296,6 +297,7 @@ export function createBrowserQaBridge(): Window["oscode"] {
     onAgentActivity: noopSubscription,
     onAiPipelineState: noopSubscription,
     onAiStatus: noopSubscription,
+    onAiModelOutput: noopSubscription,
     onAiAction: noopSubscription,
     onMenuAction: noopSubscription,
   };

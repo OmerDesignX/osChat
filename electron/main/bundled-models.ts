@@ -13,6 +13,16 @@ const tiers: Array<Exclude<AiModelTier, "custom">> = [
   "large",
 ];
 const osCodeContextLimit = 262_144;
+const ggufStartupContext = 8_192;
+
+export function defaultBuiltInContext(
+  engine: "llamacpp" | "mlx",
+  maximum = osCodeContextLimit,
+) {
+  return engine === "llamacpp"
+    ? Math.min(ggufStartupContext, maximum)
+    : maximum;
+}
 
 async function mlxContextLimit(directory: string) {
   try {
@@ -185,12 +195,15 @@ export async function bundledModels(modelsRoot: string): Promise<AiModel[]> {
       installed,
       supported,
       contextLimit: osCodeContextLimit,
+      preferredContext: defaultBuiltInContext(engine),
       supportReason: supported
         ? undefined
         : `Needs about ${Math.ceil(requiredMemory(tier, bytes) / 1024 ** 3)} GB memory`,
     });
-    if (installed && engine === "mlx")
+    if (installed && engine === "mlx") {
       results.at(-1)!.contextLimit = await mlxContextLimit(installedPath);
+      results.at(-1)!.preferredContext = results.at(-1)!.contextLimit;
+    }
   }
   return results;
 }
