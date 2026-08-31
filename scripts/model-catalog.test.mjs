@@ -21,8 +21,8 @@ test("runtime selection keeps MLX on supported Apple silicon and GGUF everywhere
   assert.equal(localAiEngine("linux", "x64", "6.8.0"), "llamacpp");
 });
 
-test("GGUF models start with a memory-safe context while MLX retains its full context", () => {
-  assert.equal(defaultBuiltInContext("llamacpp"), 8_192);
+test("built-in models retain their advertised context", () => {
+  assert.equal(defaultBuiltInContext("llamacpp"), 262_144);
   assert.equal(defaultBuiltInContext("llamacpp", 4_096), 4_096);
   assert.equal(defaultBuiltInContext("mlx"), 262_144);
 });

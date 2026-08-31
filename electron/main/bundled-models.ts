@@ -13,15 +13,12 @@ const tiers: Array<Exclude<AiModelTier, "custom">> = [
   "large",
 ];
 const osCodeContextLimit = 262_144;
-const ggufStartupContext = 8_192;
 
 export function defaultBuiltInContext(
-  engine: "llamacpp" | "mlx",
+  _engine: "llamacpp" | "mlx",
   maximum = osCodeContextLimit,
 ) {
-  return engine === "llamacpp"
-    ? Math.min(ggufStartupContext, maximum)
-    : maximum;
+  return maximum;
 }
 
 async function mlxContextLimit(directory: string) {
