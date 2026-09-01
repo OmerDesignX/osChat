@@ -5,7 +5,7 @@ export type TreeEntry = {
   children?: TreeEntry[];
 };
 export type EditorPreferences = {
-  version: 13;
+  version: 14;
   theme: "dark" | "blue-dark" | "blue-light";
   locale: "en" | "ar";
   sidebarSide: "left" | "right";
@@ -86,6 +86,7 @@ export type AiPipelineState = {
   label: string;
   position: number;
   activeProject: string;
+  activeChatId: string;
 };
 export type AiModelOutput = {
   chatId: string;

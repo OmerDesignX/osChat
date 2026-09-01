@@ -1,8 +1,15 @@
 import path from "node:path";
-import type { EditorPreferences } from "../types.js";
+import type { AiInferenceHardware, EditorPreferences } from "../types.js";
+
+export function defaultAiHardware(
+  platform: NodeJS.Platform = process.platform,
+  arch = process.arch,
+): AiInferenceHardware {
+  return platform === "darwin" && arch === "x64" ? "cpu" : "auto";
+}
 
 export const defaultPreferences: EditorPreferences = {
-  version: 13,
+  version: 14,
   theme: "dark",
   locale: "en",
   sidebarSide: "left",
@@ -23,7 +30,7 @@ export const defaultPreferences: EditorPreferences = {
   aiFileAccess: false,
   aiWebAccess: false,
   aiContextLimit: 262144,
-  aiHardware: "auto",
+  aiHardware: defaultAiHardware(),
   aiThinkingEnabled: true,
   suggestions: true,
   wordWrap: false,
@@ -37,12 +44,32 @@ export const defaultPreferences: EditorPreferences = {
   lastProject: "",
 };
 
-export function validPreferences(value: unknown): EditorPreferences {
-  if (!value || typeof value !== "object") return { ...defaultPreferences };
+export function validPreferences(
+  value: unknown,
+  platform: NodeJS.Platform = process.platform,
+  arch = process.arch,
+): EditorPreferences {
+  if (!value || typeof value !== "object")
+    return {
+      ...defaultPreferences,
+      aiHardware: defaultAiHardware(platform, arch),
+    };
   const input = value as Partial<EditorPreferences>;
   const legacy = value as { aiAllowEdits?: unknown; theme?: unknown };
+  const savedHardware = ["auto", "cpu", "gpu"].includes(
+    String(input.aiHardware),
+  )
+    ? (input.aiHardware as AiInferenceHardware)
+    : undefined;
+  const aiHardware =
+    platform === "darwin" &&
+    arch === "x64" &&
+    Number(input.version) < 14 &&
+    savedHardware === "auto"
+      ? "cpu"
+      : savedHardware || defaultAiHardware(platform, arch);
   return {
-    version: 13,
+    version: 14,
     theme:
       input.theme === "blue-dark" || input.theme === "blue-light"
         ? input.theme
@@ -89,7 +116,7 @@ export function validPreferences(value: unknown): EditorPreferences {
       String(input.aiEngine),
     )
       ? (input.aiEngine as EditorPreferences["aiEngine"])
-      : process.platform === "darwin" && process.arch === "arm64"
+      : platform === "darwin" && arch === "arm64"
         ? "mlx"
         : "llamacpp",
     aiModel:
@@ -115,9 +142,7 @@ export function validPreferences(value: unknown): EditorPreferences {
       )
         ? Number(input.aiContextLimit)
         : 262144,
-    aiHardware: ["auto", "cpu", "gpu"].includes(String(input.aiHardware))
-      ? (input.aiHardware as EditorPreferences["aiHardware"])
-      : "auto",
+    aiHardware,
     aiThinkingEnabled:
       typeof input.aiThinkingEnabled === "boolean"
         ? input.aiThinkingEnabled

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import {
+  defaultAiHardware,
   defaultPreferences,
   validPreferences,
 } from "../dist-electron/main/preferences.js";
@@ -43,7 +44,7 @@ test("accepts versioned local editor preferences", () => {
       telemetry: true,
     }),
     {
-      version: 13,
+      version: 14,
       theme: "blue-dark",
       locale: "ar",
       sidebarSide: "right",
@@ -74,6 +75,33 @@ test("accepts versioned local editor preferences", () => {
       autoUpdateDismissedVersion: "1.2.3",
       lastProject,
     },
+  );
+});
+
+test("Intel Macs default llama.cpp to CPU and preserve an explicit Metal choice", () => {
+  assert.equal(defaultAiHardware("darwin", "x64"), "cpu");
+  assert.equal(defaultAiHardware("darwin", "arm64"), "auto");
+  assert.equal(defaultAiHardware("win32", "x64"), "auto");
+  assert.equal(validPreferences({}, "darwin", "x64").aiHardware, "cpu");
+  assert.equal(
+    validPreferences({ version: 13, aiHardware: "auto" }, "darwin", "x64")
+      .aiHardware,
+    "cpu",
+  );
+  assert.equal(
+    validPreferences({ version: 13, aiHardware: "gpu" }, "darwin", "x64")
+      .aiHardware,
+    "gpu",
+  );
+  assert.equal(
+    validPreferences({ version: 14, aiHardware: "cpu" }, "darwin", "x64")
+      .aiHardware,
+    "cpu",
+  );
+  assert.equal(
+    validPreferences({ version: 13, aiHardware: "auto" }, "darwin", "arm64")
+      .aiHardware,
+    "auto",
   );
 });
 

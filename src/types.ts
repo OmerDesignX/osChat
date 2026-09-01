@@ -5,7 +5,7 @@ export type TreeEntry = {
   children?: TreeEntry[];
 };
 export type EditorPreferences = {
-  version: 13;
+  version: 14;
   theme: "dark" | "blue-dark" | "blue-light";
   locale: "en" | "ar";
   sidebarSide: "left" | "right";
@@ -86,6 +86,7 @@ export type AiPipelineState = {
   label: string;
   position: number;
   activeProject: string;
+  activeChatId: string;
 };
 export type AiModelOutput = {
   chatId: string;
@@ -580,7 +581,9 @@ declare global {
       showAgentBrowser(): Promise<AgentBrowserSnapshot | null>;
       stopCurrentActivity(): Promise<boolean>;
       onAgentActivity(cb: (activity: AgentActivity) => void): () => void;
+      aiPipelineState(): Promise<AiPipelineState>;
       onAiPipelineState(cb: (state: AiPipelineState) => void): () => void;
+      onAiChatComplete(cb: (chatId: string) => void): () => void;
       onAiStatus(cb: (status: string) => void): () => void;
       onAiModelOutput(cb: (output: AiModelOutput) => void): () => void;
       onAiAction(cb: (action: AiActionEntry) => void): () => void;

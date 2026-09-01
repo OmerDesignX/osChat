@@ -109,7 +109,7 @@ export function createBrowserQaBridge(): Window["oscode"] {
     },
   ];
   let preferences: EditorPreferences = {
-    version: 13,
+    version: 14,
     theme: "dark",
     locale: "en",
     sidebarSide: "left",

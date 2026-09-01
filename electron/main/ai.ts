@@ -5197,10 +5197,8 @@ export class LocalAiService {
       if (result.code === 0) return result.content;
       lastDiagnostic = result.diagnostic;
       lastCode = result.code;
-      if (index + 1 < attempts.length)
-        this.options.status(
-          "Intel GPU startup failed; retrying the model locally on CPU…",
-        );
+      // Intel automatic acceleration may retry locally on CPU. Keep that
+      // implementation detail out of the conversation status surface.
     }
     throw new Error(publicModelError(lastDiagnostic, lastCode));
   }

@@ -15,6 +15,51 @@ const preload = read("electron/preload/index.cts");
 const ai = read("electron/main/ai.ts");
 const chatCollectionActions = read("src/lib/chat-collection-actions.ts");
 
+test("AI work survives navigation, hidden windows, and renderer reattachment", () => {
+  assert.doesNotMatch(
+    main,
+    /window\.on\("closed"[\s\S]{0,900}aiService\.stop\(\)/,
+  );
+  assert.match(
+    main,
+    /process\.platform === "darwin"[\s\S]*?event\.preventDefault\(\);[\s\S]*?window\.hide\(\)/,
+  );
+  assert.match(main, /async function persistAiResponse/);
+  assert.match(main, /broadcastToAiProject\([\s\S]*?"ai:chat-complete"/);
+  assert.match(main, /ipcMain\.handle\("ai:pipeline-current"/);
+  assert.match(preload, /aiPipelineState: \(\) => ipcRenderer\.invoke/);
+  assert.match(preload, /onAiChatComplete:/);
+  assert.match(aiPanel, /window\.oscode[\s\S]{0,60}\.aiPipelineState\(\)/);
+  assert.match(aiPanel, /window\.oscode\.onAiChatComplete/);
+  assert.match(aiPanel, /pipelineState\.activeChatId === chatId/);
+  assert.match(app, /const sharedAi = \(/);
+  assert.match(app, /key="oschat-shared-ai"/);
+  assert.match(app, /\{sharedAi\}/);
+});
+
+test("Intel CPU retry details never appear in public status text", () => {
+  assert.doesNotMatch(ai, /Intel GPU startup failed/);
+  assert.match(
+    ai,
+    /implementation detail out of the conversation status surface/,
+  );
+});
+
+test("osChat uses the shared padded pill and circular action system", () => {
+  assert.match(styles, /osChat rounded control system/);
+  assert.match(styles, /--oschat-large-control-height: 54px/);
+  assert.match(styles, /border-radius: var\(--oschat-pill-radius\)/);
+  assert.match(
+    styles,
+    /\.oschat-main\.chat-view \.ai-composer-controls\.workspace/,
+  );
+  assert.match(
+    styles,
+    /grid-template-columns: minmax\(220px, 1fr\) minmax\(220px, 1fr\) auto/,
+  );
+  assert.match(aiPanel, /<FeatherIcon icon="cpu" size="18" \/>/);
+});
+
 test("osChat uses a chat-first shell with familiar left navigation", () => {
   assert.match(app, /className="oschat-sidebar"/);
   assert.match(app, /className="new-chat-button"/);
@@ -426,4 +471,66 @@ test("settings use one consolidated, balanced panel system", () => {
   assert.match(app, /Data & privacy/);
   assert.match(styles, /width: min\(1020px, 96vw\)/);
   assert.match(styles, /grid-template-columns: 230px minmax\(0, 1fr\)/);
+});
+
+test("osCode polish is shared by chat lists, utility panels, and composer actions", () => {
+  assert.match(styles, /osCode polish pass/);
+  assert.match(
+    styles,
+    /\.oschat-main\.chat-view \.ai-composer \{[\s\S]*?align-items: center/,
+  );
+  assert.match(
+    styles,
+    /\.sidebar-list > div \{[\s\S]*?gap: 10px;[\s\S]*?padding: 4px 2px 12px/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-settings > aside header \.oschat-wordmark,[\s\S]*?"Playfair Display"/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-activity-popover[\s\S]*?border-radius: var\(--oschat-panel-radius\)/,
+  );
+  assert.match(styles, /\.oschat-app \.ai-action-timeline \{[\s\S]*?gap: 10px/);
+});
+
+test("long AI panels keep opaque headers fixed above one padded scroll body", () => {
+  assert.match(aiPanel, /className="ai-activity-body"/);
+  assert.match(aiPanel, /className="ai-permission-body"/);
+  assert.match(styles, /Final panel scroll contract/);
+  assert.match(
+    styles,
+    /> \.ai-history-title \{[\s\S]*?position: relative;[\s\S]*?background: var\(--overlay-surface\) !important;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-activity-body,[\s\S]*?\.oschat-app \.ai-permission-body \{[\s\S]*?overflow-y: auto;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-model-popover \.ai-model-manager \{[\s\S]*?max-height: none !important;[\s\S]*?padding: 20px 20px 38px;[\s\S]*?overflow-y: auto;/,
+  );
+});
+
+test("dropdowns, color swatches, permissions, and model lists share one inset rhythm", () => {
+  assert.match(
+    styles,
+    /\.oschat-app select \{[\s\S]*?padding: 0 52px 0 18px !important;[\s\S]*?appearance: none !important;[\s\S]*?background-position:/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app input\[type="color"\] \{[\s\S]*?border-radius: 50% !important;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-permission-body \.ai-permission-row \{[\s\S]*?min-height: 66px;[\s\S]*?border-radius: 22px;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-model-popover \.ai-model-table \{[\s\S]*?display: grid;[\s\S]*?gap: 10px;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.settings-model-list \{[\s\S]*?gap: 10px;/,
+  );
 });

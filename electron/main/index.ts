@@ -26,8 +26,11 @@ import { pathToFileURL } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as pty from "node-pty";
 import type {
+  AiChatMessage,
+  AiChatResponse,
   AiEngine,
   AiModel,
+  AiPipelineState,
   GitCommit,
   GitState,
   TreeEntry,
@@ -116,8 +119,10 @@ let aiExecutionOwner: WebContents | null = null;
 let aiExecutionTail: Promise<void> = Promise.resolve();
 type AiPipelineEntry = {
   id: number;
-  sender: WebContents;
+  senderId: number;
+  projectRoot: string;
   projectName: string;
+  chatId: string;
   state: "waiting" | "running";
 };
 let aiPipelineSequence = 0;
@@ -154,6 +159,17 @@ function broadcastToRenderers(channel: string, ...args: unknown[]) {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed() && !window.webContents.isDestroyed())
       window.webContents.send(channel, ...args);
+  }
+}
+function broadcastToAiProject(
+  targetRoot: string,
+  channel: string,
+  ...args: unknown[]
+) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed() || window.webContents.isDestroyed()) continue;
+    const contextRoot = windowContexts.get(window.webContents.id)?.projectRoot;
+    if (contextRoot === targetRoot) window.webContents.send(channel, ...args);
   }
 }
 function attentionOverlay(kind: AppAttentionKind, count: number) {
@@ -279,72 +295,124 @@ function withSenderAiProject<T>(event: IpcMainInvokeEvent, operation: () => T) {
   const context = activateSender(event);
   return aiProjectContexts.run(context?.projectRoot || "", operation);
 }
-function publishAiPipelineStates() {
+function aiPipelineStateFor(senderId: number): AiPipelineState {
   const running = aiPipelineEntries.find((entry) => entry.state === "running");
   const waiting = aiPipelineEntries.filter(
     (entry) => entry.state === "waiting",
   );
+  const senderRoot = windowContexts.get(senderId)?.projectRoot || "";
+  const ownRunning =
+    running &&
+    (running.senderId === senderId ||
+      (senderRoot !== "" && running.projectRoot === senderRoot))
+      ? running
+      : undefined;
+  if (ownRunning)
+    return {
+      state: "running",
+      label: `AI is working in ${ownRunning.projectName}`,
+      position: 0,
+      activeProject: ownRunning.projectName,
+      activeChatId: ownRunning.chatId,
+    };
+  const ownRequest = waiting.find(
+    (entry) =>
+      entry.senderId === senderId ||
+      (senderRoot !== "" && entry.projectRoot === senderRoot),
+  );
+  if (ownRequest) {
+    const position = waiting.indexOf(ownRequest) + 1;
+    return {
+      state: "waiting",
+      label: running
+        ? `Waiting for AI in ${running.projectName} to finish · position ${position}`
+        : `Waiting for the shared AI pipeline · position ${position}`,
+      position,
+      activeProject: running?.projectName || "",
+      activeChatId: ownRequest.chatId,
+    };
+  }
+  return {
+    state: "idle",
+    label: "",
+    position: 0,
+    activeProject: running?.projectName || "",
+    activeChatId: "",
+  };
+}
+function publishAiPipelineStates() {
   for (const window of BrowserWindow.getAllWindows()) {
     if (window.isDestroyed() || window.webContents.isDestroyed()) continue;
-    const senderId = window.webContents.id;
-    if (running?.sender.id === senderId) {
-      window.webContents.send("ai:pipeline-state", {
-        state: "running",
-        label: `AI is working in ${running.projectName}`,
-        position: 0,
-        activeProject: running.projectName,
-      });
-      continue;
-    }
-    const ownRequest = waiting.find((entry) => entry.sender.id === senderId);
-    if (ownRequest) {
-      const position = waiting.indexOf(ownRequest) + 1;
-      window.webContents.send("ai:pipeline-state", {
-        state: "waiting",
-        label: running
-          ? `Waiting for AI in ${running.projectName} to finish · position ${position}`
-          : `Waiting for the shared AI pipeline · position ${position}`,
-        position,
-        activeProject: running?.projectName || "",
-      });
-      continue;
-    }
-    window.webContents.send("ai:pipeline-state", {
-      state: "idle",
-      label: "",
-      position: 0,
-      activeProject: running?.projectName || "",
-    });
+    window.webContents.send(
+      "ai:pipeline-state",
+      aiPipelineStateFor(window.webContents.id),
+    );
   }
+}
+async function persistAiResponse(request: unknown, response: AiChatResponse) {
+  if (!request || typeof request !== "object") return;
+  const input = request as { chatId?: unknown; messages?: unknown };
+  const chatId =
+    typeof input.chatId === "string" ? input.chatId.trim().slice(0, 100) : "";
+  if (!chatId) return;
+  const retained = Array.isArray(response.retainedMessages)
+    ? response.retainedMessages
+    : Array.isArray(input.messages)
+      ? (input.messages as AiChatMessage[])
+      : [];
+  const assistant: AiChatMessage = {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content: response.content,
+    thinking: response.thinking,
+    actions: response.actions,
+    createdAt: new Date().toISOString(),
+  };
+  await aiService.saveChat(
+    chatId,
+    [...retained, assistant],
+    response.contextSummary,
+  );
 }
 function queueAiRequest(event: IpcMainInvokeEvent, request: unknown) {
   const context = activateSender(event);
   const requestedRoot = context?.projectRoot || "";
   const projectName = requestedRoot ? path.basename(requestedRoot) : "project";
+  const chatId =
+    request &&
+    typeof request === "object" &&
+    typeof (request as { chatId?: unknown }).chatId === "string"
+      ? (request as { chatId: string }).chatId.slice(0, 100)
+      : "";
   const entry: AiPipelineEntry = {
     id: ++aiPipelineSequence,
-    sender: event.sender,
+    senderId: event.sender.id,
+    projectRoot: requestedRoot,
     projectName,
+    chatId,
     state: "waiting",
   };
   aiPipelineEntries.push(entry);
   publishAiPipelineStates();
   const run = aiExecutionTail.then(async () => {
     try {
-      if (event.sender.isDestroyed())
-        throw new Error("The window closed before its AI request could start");
       entry.state = "running";
       aiProjectRoot = requestedRoot;
-      aiExecutionOwner = event.sender;
+      aiExecutionOwner = event.sender.isDestroyed() ? null : event.sender;
       const ownerWindow = BrowserWindow.fromWebContents(event.sender);
       if (ownerWindow && !ownerWindow.isDestroyed()) mainWindow = ownerWindow;
       publishAiPipelineStates();
-      return await aiProjectContexts.run(requestedRoot, () =>
+      const response = await aiProjectContexts.run(requestedRoot, () =>
         aiService.chat(request),
       );
+      await persistAiResponse(request, response).catch((error) =>
+        console.error("Could not persist the completed AI response", error),
+      );
+      broadcastToAiProject(requestedRoot, "ai:chat-complete", chatId);
+      return response;
     } finally {
       aiProjectRoot = "";
-      if (aiExecutionOwner === event.sender) aiExecutionOwner = null;
+      if (aiExecutionOwner?.id === entry.senderId) aiExecutionOwner = null;
       const focused = BrowserWindow.getFocusedWindow();
       if (focused && !focused.isDestroyed()) {
         mainWindow = focused;
@@ -1568,6 +1636,15 @@ function createWindow(show = true, restoreLastProject = true) {
   );
   window.on("close", (event) => {
     const context = windowContexts.get(webContentsId);
+    if (
+      process.platform === "darwin" &&
+      !quittingAfterCleanup &&
+      !context?.allowClose
+    ) {
+      event.preventDefault();
+      window.hide();
+      return;
+    }
     if (quittingAfterCleanup || context?.allowClose || !context?.dirty) return;
     event.preventDefault();
     if (!context || context.confirmOpen) return;
@@ -1603,7 +1680,6 @@ function createWindow(show = true, restoreLastProject = true) {
       runningScriptOwner = null;
       runningDebug = false;
     }
-    if (aiExecutionOwner?.id === ownerId) void aiService.stop();
     if (mainWindow === window) mainWindow = null;
   });
   return window;
@@ -3285,6 +3361,10 @@ function registerIpc() {
     appUpdateService.installReadyUpdate(),
   );
   ipcMain.handle("ai:list-models", () => aiService.listModels());
+  ipcMain.handle("ai:pipeline-current", (event) => {
+    activateSender(event);
+    return aiPipelineStateFor(event.sender.id);
+  });
   ipcMain.handle("ai:hardware-profile", () => aiService.hardwareProfile());
   ipcMain.handle("ai:install-cuda-support", () =>
     aiService.installCudaSupport(),
@@ -3523,9 +3603,13 @@ function registerIpc() {
   ipcMain.handle("ai:revert-history", (event, id: unknown) =>
     withSenderAiProject(event, () => aiService.revertHistory(id)),
   );
-  ipcMain.handle("ai:stop", (event) =>
-    aiExecutionOwner?.id === event.sender.id ? aiService.stop() : false,
-  );
+  ipcMain.handle("ai:stop", (event) => {
+    const senderRoot = windowContexts.get(event.sender.id)?.projectRoot || "";
+    return aiExecutionOwner?.id === event.sender.id ||
+      (senderRoot !== "" && senderRoot === aiProjectRoot)
+      ? aiService.stop()
+      : false;
+  });
   ipcMain.handle("agent:stop-control", () => agentControlService.stop());
   ipcMain.handle("agent:browser-snapshot", () =>
     agentControlService.browserSnapshot(),
@@ -5194,16 +5278,12 @@ if (ownsSingleInstance)
         return python;
       },
       status: (message) => broadcastToRenderers("ai:status", message),
-      modelOutput: (output) => {
-        if (aiExecutionOwner && !aiExecutionOwner.isDestroyed())
-          aiExecutionOwner.send("ai:model-output", output);
-      },
+      modelOutput: (output) =>
+        broadcastToAiProject(currentAiProjectRoot(), "ai:model-output", output),
       checkpoint: (root, relative, before) =>
         saveHistoryStore.record(root, relative, before, "agent").then(() => {}),
-      action: (action) => {
-        if (aiExecutionOwner && !aiExecutionOwner.isDestroyed())
-          aiExecutionOwner.send("ai:action", action);
-      },
+      action: (action) =>
+        broadcastToAiProject(currentAiProjectRoot(), "ai:action", action),
       activity: (activity) => broadcastToRenderers("agent:activity", activity),
       platformioState: () => platformioService.state(currentAiProjectRoot()),
       platformioInstall: async () => {
@@ -5312,6 +5392,7 @@ app.on("before-quit", (event) => {
     terminals.size === 0 &&
     !agentControlService?.isActive()
   ) {
+    quittingAfterCleanup = true;
     void disposeAiServiceSafely();
     return;
   }

@@ -459,6 +459,7 @@ export function AiPanel({
     label: "",
     position: 0,
     activeProject: "",
+    activeChatId: "",
   });
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [ollamaPickerOpen, setOllamaPickerOpen] = useState(false);
@@ -739,6 +740,10 @@ export function AiPanel({
 
   useEffect(() => {
     void refreshModels().catch(() => undefined);
+    void window.oscode
+      .aiPipelineState()
+      .then(setPipelineState)
+      .catch(() => undefined);
     const offStatus = window.oscode.onAiStatus(setStatus);
     const offModelOutput = window.oscode.onAiModelOutput(
       (output: AiModelOutput) => {
@@ -768,13 +773,40 @@ export function AiPanel({
       setLiveActions(next);
     });
     const offPipeline = window.oscode.onAiPipelineState(setPipelineState);
+    const offComplete = window.oscode.onAiChatComplete((completedChatId) => {
+      void refreshAgentState()
+        .then((next) => {
+          if (completedChatId !== chatIdRef.current) return;
+          const chat = next.chats.find((item) => item.id === completedChatId);
+          if (!chat) return;
+          const cleanMessages = cleanStoredMessages(chat.messages);
+          messagesRef.current = cleanMessages;
+          setMessages(cleanMessages);
+          setContextSummary(chat.contextSummary);
+          setBusy(false);
+          busyRef.current = false;
+          setLiveModelOutput({ chatId: "", reasoning: "", answer: "" });
+        })
+        .catch(() => undefined);
+    });
     return () => {
       offStatus();
       offModelOutput();
       offAction();
       offPipeline();
+      offComplete();
     };
   }, []);
+  useEffect(() => {
+    if (
+      chatId &&
+      pipelineState.activeChatId === chatId &&
+      pipelineState.state !== "idle"
+    ) {
+      busyRef.current = true;
+      setBusy(true);
+    }
+  }, [chatId, pipelineState.activeChatId, pipelineState.state]);
   useEffect(() => {
     if (!workspaceMode || !permissionsDrawerOpen) return;
 
@@ -836,7 +868,7 @@ export function AiPanel({
     setChatId("");
     setMessages([]);
     setContextSummary("");
-    setPermissionsDrawerOpen(true);
+    setPermissionsDrawerOpen(false);
     if (projectName)
       void refreshAgentState()
         .then((next) => {
@@ -2041,6 +2073,7 @@ export function AiPanel({
         setPermissionsDrawerOpen(false);
       }}
     >
+      <FeatherIcon icon="cpu" size="18" />
       <span>
         <b>{selectedModel?.name || "Choose a local model"}</b>
         <small>
@@ -2798,56 +2831,60 @@ export function AiPanel({
               title="Agent activity"
               close={() => setActivityOpen(false)}
             />
-            <div className="ai-activity-overview">
-              <div>
-                <span>
-                  <b>{activityEntries.length}</b>
-                  <small>actions</small>
-                </span>
-                <span>
-                  <b>
-                    {
-                      activityEntries.filter(
-                        (entry) => entry.tool === "web_search",
-                      ).length
-                    }
-                  </b>
-                  <small>searches</small>
-                </span>
-                <span>
-                  <b>
-                    {
-                      new Set(
-                        activityEntries.flatMap(
-                          (entry) => entry.websites || [],
-                        ),
-                      ).size
-                    }
-                  </b>
-                  <small>websites</small>
-                </span>
+            <div className="ai-activity-body">
+              <div className="ai-activity-overview">
+                <div>
+                  <span>
+                    <b>{activityEntries.length}</b>
+                    <small>actions</small>
+                  </span>
+                  <span>
+                    <b>
+                      {
+                        activityEntries.filter(
+                          (entry) => entry.tool === "web_search",
+                        ).length
+                      }
+                    </b>
+                    <small>searches</small>
+                  </span>
+                  <span>
+                    <b>
+                      {
+                        new Set(
+                          activityEntries.flatMap(
+                            (entry) => entry.websites || [],
+                          ),
+                        ).size
+                      }
+                    </b>
+                    <small>websites</small>
+                  </span>
+                </div>
+                <p>
+                  A local record of model tools, public-web sources,
+                  permissions, and visible device actions. Typed text and file
+                  contents are not recorded.
+                </p>
               </div>
-              <p>
-                A local record of model tools, public-web sources, permissions,
-                and visible device actions. Typed text and file contents are not
-                recorded.
-              </p>
+              <div className="ai-activity-filters" aria-label="Filter activity">
+                {(["all", "web", "device", "project"] as const).map(
+                  (filter) => (
+                    <button
+                      key={filter}
+                      className={activityFilter === filter ? "active" : ""}
+                      onClick={() => setActivityFilter(filter)}
+                    >
+                      {filter[0].toUpperCase() + filter.slice(1)}
+                    </button>
+                  ),
+                )}
+              </div>
+              <ActionTimeline
+                actions={filteredActivityEntries.slice().reverse()}
+                empty="No matching agent actions in this chat yet."
+              />
             </div>
-            <div className="ai-activity-filters" aria-label="Filter activity">
-              {(["all", "web", "device", "project"] as const).map((filter) => (
-                <button
-                  key={filter}
-                  className={activityFilter === filter ? "active" : ""}
-                  onClick={() => setActivityFilter(filter)}
-                >
-                  {filter[0].toUpperCase() + filter.slice(1)}
-                </button>
-              ))}
-            </div>
-            <ActionTimeline
-              actions={filteredActivityEntries.slice().reverse()}
-              empty="No matching agent actions in this chat yet."
-            />
           </div>,
           document.querySelector(".app") || document.body,
         )}
@@ -2859,70 +2896,74 @@ export function AiPanel({
               title="Permissions"
               close={() => setPermissionOpen(false)}
             />
-            <div
-              className="ai-permission-tools horizontal-menu-scroll"
-              data-horizontal-menu
-            >
-              <label>
-                <FeatherIcon icon="search" size="17" />
-                <input
-                  value={permissionSearch}
-                  onChange={(event) => setPermissionSearch(event.target.value)}
-                  placeholder="Search permissions"
-                />
-              </label>
-              <button
-                onClick={async () => {
-                  for (const kind of permissionKinds)
-                    await window.oscode.grantAiPermission(
-                      kind,
-                      "conversation",
-                      chatId,
-                      "All capabilities for this chat",
-                    );
-                  await refreshAgentState();
-                }}
+            <div className="ai-permission-body">
+              <div
+                className="ai-permission-tools horizontal-menu-scroll"
+                data-horizontal-menu
               >
-                Allow all for this chat
-              </button>
-            </div>
-            <div className="ai-permission-list">
-              {agentState.permissions.filter((grant) =>
-                `${permissionLabels[grant.kind]} ${grant.detail} ${grant.scope}`
-                  .toLowerCase()
-                  .includes(permissionSearch.toLowerCase()),
-              ).length === 0 ? (
-                <p>No saved permissions.</p>
-              ) : (
-                agentState.permissions
-                  .filter((grant) =>
-                    `${permissionLabels[grant.kind]} ${grant.detail} ${grant.scope}`
-                      .toLowerCase()
-                      .includes(permissionSearch.toLowerCase()),
-                  )
-                  .map((grant) => (
-                    <div className="ai-permission-row" key={grant.id}>
-                      <FeatherIcon icon="shield" size="18" />
-                      <div>
-                        <b>{permissionLabels[grant.kind]}</b>
-                        <span>
-                          {grant.scope === "conversation"
-                            ? "This chat"
-                            : grant.scope}
-                          {grant.detail ? ` · ${grant.detail}` : ""}
-                        </span>
+                <label>
+                  <FeatherIcon icon="search" size="17" />
+                  <input
+                    value={permissionSearch}
+                    onChange={(event) =>
+                      setPermissionSearch(event.target.value)
+                    }
+                    placeholder="Search permissions"
+                  />
+                </label>
+                <button
+                  onClick={async () => {
+                    for (const kind of permissionKinds)
+                      await window.oscode.grantAiPermission(
+                        kind,
+                        "conversation",
+                        chatId,
+                        "All capabilities for this chat",
+                      );
+                    await refreshAgentState();
+                  }}
+                >
+                  Allow all for this chat
+                </button>
+              </div>
+              <div className="ai-permission-list">
+                {agentState.permissions.filter((grant) =>
+                  `${permissionLabels[grant.kind]} ${grant.detail} ${grant.scope}`
+                    .toLowerCase()
+                    .includes(permissionSearch.toLowerCase()),
+                ).length === 0 ? (
+                  <p>No saved permissions.</p>
+                ) : (
+                  agentState.permissions
+                    .filter((grant) =>
+                      `${permissionLabels[grant.kind]} ${grant.detail} ${grant.scope}`
+                        .toLowerCase()
+                        .includes(permissionSearch.toLowerCase()),
+                    )
+                    .map((grant) => (
+                      <div className="ai-permission-row" key={grant.id}>
+                        <FeatherIcon icon="shield" size="18" />
+                        <div>
+                          <b>{permissionLabels[grant.kind]}</b>
+                          <span>
+                            {grant.scope === "conversation"
+                              ? "This chat"
+                              : grant.scope}
+                            {grant.detail ? ` · ${grant.detail}` : ""}
+                          </span>
+                        </div>
+                        <IconButton
+                          icon="x"
+                          label="Revoke permission"
+                          onClick={async () => {
+                            await window.oscode.revokeAiPermission(grant.id);
+                            await refreshAgentState();
+                          }}
+                        />
                       </div>
-                      <IconButton
-                        icon="x"
-                        label="Revoke permission"
-                        onClick={async () => {
-                          await window.oscode.revokeAiPermission(grant.id);
-                          await refreshAgentState();
-                        }}
-                      />
-                    </div>
-                  ))
-              )}
+                    ))
+                )}
+              </div>
             </div>
           </div>,
           document.querySelector(".app") || document.body,

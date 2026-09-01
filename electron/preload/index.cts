@@ -148,10 +148,16 @@ contextBridge.exposeInMainWorld("oscode", {
     ipcRenderer.on("agent:activity", listener);
     return () => ipcRenderer.removeListener("agent:activity", listener);
   },
+  aiPipelineState: () => ipcRenderer.invoke("ai:pipeline-current"),
   onAiPipelineState: (callback: (state: unknown) => void) => {
     const listener = (_event: unknown, state: unknown) => callback(state);
     ipcRenderer.on("ai:pipeline-state", listener);
     return () => ipcRenderer.removeListener("ai:pipeline-state", listener);
+  },
+  onAiChatComplete: (callback: (chatId: string) => void) => {
+    const listener = (_event: unknown, chatId: string) => callback(chatId);
+    ipcRenderer.on("ai:chat-complete", listener);
+    return () => ipcRenderer.removeListener("ai:chat-complete", listener);
   },
   resolveAiEdits: (ids: string[], approve: boolean) =>
     ipcRenderer.invoke("ai:resolve-edits", ids, approve),
