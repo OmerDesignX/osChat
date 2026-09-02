@@ -66,6 +66,10 @@ test("osChat uses the shared padded pill and circular action system", () => {
 test("osChat uses a chat-first shell with familiar left navigation", () => {
   assert.match(app, /className="oschat-sidebar"/);
   assert.match(app, /className="new-chat-button"/);
+  assert.match(
+    app,
+    /className="new-chat-button"[\s\S]{0,420}className="sidebar-divider new-chat-divider"[\s\S]{0,120}<nav className="workspace-nav"/,
+  );
   assert.match(app, /Search chats and workspaces/);
   assert.match(app, /Recent chats/);
   assert.doesNotMatch(

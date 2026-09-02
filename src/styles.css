@@ -14222,7 +14222,11 @@ button > svg * {
 }
 
 .workspace-nav {
-  margin-top: 8px;
+  margin-top: 0;
+}
+
+.new-chat-divider {
+  margin-block: 10px 7px;
 }
 
 .workspace-nav button,

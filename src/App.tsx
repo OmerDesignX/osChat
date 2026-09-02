@@ -1202,6 +1202,7 @@ export function App() {
             New chat
             <span>{window.oscode.platform === "darwin" ? "⌘N" : "Ctrl N"}</span>
           </button>
+          <div className="sidebar-divider new-chat-divider" />
           <nav className="workspace-nav" aria-label="Workspaces">
             <button
               type="button"
