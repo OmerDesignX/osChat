@@ -1,4 +1,9 @@
-import { TouchBar, type BrowserWindow } from "electron";
+import {
+  TouchBar,
+  nativeImage,
+  type BrowserWindow,
+  type NativeImage,
+} from "electron";
 
 const accent = "#89cff0";
 const dark = "#24292c";
@@ -19,6 +24,14 @@ export type TouchBarController = {
 
 function booleanValue(source: Record<string, unknown>, key: string) {
   return source[key] === true;
+}
+
+function touchBarIcon(name: string): NativeImage {
+  const source = nativeImage.createFromNamedImage(name);
+  if (source.isEmpty()) return source;
+  const icon = source.resize({ width: 18, height: 18, quality: "best" });
+  icon.setTemplateImage(true);
+  return icon;
 }
 
 function mergedBoolean(
@@ -45,47 +58,84 @@ export function installOsChatTouchBar(
     if (!window.isDestroyed() && !window.webContents.isDestroyed())
       window.webContents.send("menu:action", action);
   };
+  const icons = {
+    newChat: touchBarIcon("NSTouchBarComposeTemplate"),
+    chats: touchBarIcon("NSTouchBarListViewTemplate"),
+    notes: touchBarIcon("NSTouchBarBookmarksTemplate"),
+    document: touchBarIcon("NSTouchBarAddDetailTemplate"),
+    spreadsheet: touchBarIcon("NSTouchBarIconViewTemplate"),
+    presentation: touchBarIcon("NSTouchBarQuickLookTemplate"),
+    attach: touchBarIcon("NSTouchBarDownloadTemplate"),
+    send: touchBarIcon("NSTouchBarGoUpTemplate"),
+    stop: touchBarIcon("NSTouchBarRecordStopTemplate"),
+    retry: touchBarIcon("NSTouchBarRefreshTemplate"),
+  };
   const newChat = new TouchBar.TouchBarButton({
-    label: "＋ New Chat",
+    label: "New Chat",
+    icon: icons.newChat,
+    iconPosition: "left",
     accessibilityLabel: "Start a new chat",
     backgroundColor: accent,
     click: () => send("new-chat"),
   });
-  const chats = new TouchBar.TouchBarButton({
-    label: "Chats",
-    accessibilityLabel: "Show chats",
-    backgroundColor: accent,
-    click: () => send("show-chats"),
-  });
-  const notes = new TouchBar.TouchBarButton({
-    label: "Notes",
-    accessibilityLabel: "Show notes",
-    backgroundColor: dark,
-    click: () => send("show-notes"),
-  });
   const attach = new TouchBar.TouchBarButton({
     label: "Attach",
+    icon: icons.attach,
+    iconPosition: "left",
     accessibilityLabel: "Attach local media or documents",
     backgroundColor: dark,
     click: () => send("chat-attach"),
   });
   const sendStop = new TouchBar.TouchBarButton({
-    label: "↑ Send",
+    label: "Send",
+    icon: icons.send,
+    iconPosition: "left",
     accessibilityLabel: "Send message",
     backgroundColor: accent,
     click: () => send(state.busy ? "chat-stop" : "chat-send"),
   });
   const retry = new TouchBar.TouchBarButton({
-    label: "↻ Retry",
+    label: "Retry",
+    icon: icons.retry,
+    iconPosition: "left",
     accessibilityLabel: "Retry the last response",
     backgroundColor: dark,
     click: () => send("chat-retry"),
   });
+  const secondaryActions = [
+    { label: "Chats", icon: icons.chats, action: "show-chats" },
+    { label: "Notes", icon: icons.notes, action: "show-notes" },
+    {
+      label: "Document",
+      icon: icons.document,
+      action: "new-document",
+    },
+    {
+      label: "Sheet",
+      icon: icons.spreadsheet,
+      action: "new-spreadsheet",
+    },
+    {
+      label: "Slides",
+      icon: icons.presentation,
+      action: "new-presentation",
+    },
+  ];
+  const secondary = new TouchBar.TouchBarScrubber({
+    items: secondaryActions.map(({ label, icon }) => ({ label, icon })),
+    mode: "free",
+    continuous: false,
+    showArrowButtons: true,
+    selectedStyle: "background",
+    highlight: (index) => {
+      const item = secondaryActions[index];
+      if (item) send(item.action);
+    },
+  });
   const bar = new TouchBar({
     items: [
       newChat,
-      chats,
-      notes,
+      secondary,
       new TouchBar.TouchBarSpacer({ size: "flexible" }),
       attach,
       sendStop,
@@ -95,11 +145,10 @@ export function installOsChatTouchBar(
   window.setTouchBar(bar);
 
   const render = () => {
-    chats.backgroundColor = state.section === "chats" ? accent : dark;
-    notes.backgroundColor = state.section === "notes" ? accent : dark;
     attach.enabled = state.canAttach && !state.busy;
     sendStop.enabled = state.busy || state.canSend;
-    sendStop.label = state.busy ? "■ Stop" : "↑ Send";
+    sendStop.label = state.busy ? "Stop" : "Send";
+    sendStop.icon = state.busy ? icons.stop : icons.send;
     sendStop.accessibilityLabel = state.busy
       ? "Stop the current response"
       : "Send message";

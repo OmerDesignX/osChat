@@ -46,6 +46,7 @@ type Props = {
   width: number;
   side: "left" | "right";
   projectName: string;
+  projectKey?: string;
   openChatId?: string;
   workspaceMode?: boolean;
   hideTerminalControl?: boolean;
@@ -64,7 +65,7 @@ type Props = {
   onHardwarePreference: (hardware: AiInferenceHardware) => void;
   onChanged: (files: string[]) => Promise<void>;
   onNotice: (message: string) => void;
-  onChatOpened?: () => void;
+  onChatOpened?: (chatId?: string) => void;
   onAttentionChange?: (
     attention: AiAttention | null,
     completePermission?: (() => Promise<void>) | null,
@@ -77,6 +78,43 @@ const labels: Record<AiEngine, string> = {
   pytorch: "PyTorch",
   mlx: "MLX",
 };
+
+type StoredChatTabs = {
+  openChatIds: string[];
+  pinnedChatIds: string[];
+  activeChatId: string;
+};
+
+function chatTabsStorageKey(scope: string) {
+  return `oschat:open-chat-tabs:v1:${encodeURIComponent(scope || "default")}`;
+}
+
+function readStoredChatTabs(key: string): StoredChatTabs {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "{}") as
+      Partial<StoredChatTabs> | undefined;
+    return {
+      openChatIds: Array.isArray(parsed?.openChatIds)
+        ? parsed.openChatIds.filter(
+            (id): id is string => typeof id === "string",
+          )
+        : [],
+      pinnedChatIds: Array.isArray(parsed?.pinnedChatIds)
+        ? parsed.pinnedChatIds.filter(
+            (id): id is string => typeof id === "string",
+          )
+        : [],
+      activeChatId:
+        typeof parsed?.activeChatId === "string" ? parsed.activeChatId : "",
+    };
+  } catch {
+    return { openChatIds: [], pinnedChatIds: [], activeChatId: "" };
+  }
+}
+
+function uniqueChatIds(ids: string[]) {
+  return [...new Set(ids.filter(Boolean))];
+}
 
 function responseDownloadName(content: string) {
   const label =
@@ -412,6 +450,7 @@ export function AiPanel({
   width,
   side,
   projectName,
+  projectKey,
   openChatId,
   workspaceMode = false,
   hideTerminalControl = false,
@@ -448,6 +487,13 @@ export function AiPanel({
   const [modelsReady, setModelsReady] = useState(false);
   const [agentState, setAgentState] = useState<AiAgentState>(emptyAgentState);
   const [chatId, setChatId] = useState("");
+  const [openChatIds, setOpenChatIds] = useState<string[]>([]);
+  const [pinnedChatIds, setPinnedChatIds] = useState<string[]>([]);
+  const [chatTabMenuId, setChatTabMenuId] = useState("");
+  const [chatTabMenuPosition, setChatTabMenuPosition] = useState({
+    top: 0,
+    left: 0,
+  });
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AiChatAttachment[]>([]);
@@ -526,6 +572,11 @@ export function AiPanel({
   const touchBarActionsRef = useRef<Record<string, () => void>>({});
   const requestEpochRef = useRef(0);
   const tierPickerInitialized = useRef(false);
+  const chatTabsReadyRef = useRef(false);
+  const storedChatTabsKey = useMemo(
+    () => chatTabsStorageKey(projectKey || projectName),
+    [projectKey, projectName],
+  );
 
   type AiPopup =
     "workspace" | "activity" | "history" | "permissions" | "models" | "ollama";
@@ -610,6 +661,32 @@ export function AiPanel({
     [customModels, source],
   );
   const activeChat = agentState.chats.find((item) => item.id === chatId);
+  const orderedOpenChatIds = useMemo(() => {
+    const open = uniqueChatIds(openChatIds);
+    const pinned = new Set(pinnedChatIds);
+    return [
+      ...open.filter((id) => pinned.has(id)),
+      ...open.filter((id) => !pinned.has(id)),
+    ];
+  }, [openChatIds, pinnedChatIds]);
+  const openChatTabs = useMemo(
+    () =>
+      orderedOpenChatIds
+        .map((id) => agentState.chats.find((chat) => chat.id === id))
+        .filter((chat): chat is AiChatThread => Boolean(chat)),
+    [agentState.chats, orderedOpenChatIds],
+  );
+  const chatTabMenuChat = agentState.chats.find(
+    (chat) => chat.id === chatTabMenuId,
+  );
+  const pipelineOccupied = pipelineState.state !== "idle";
+  const anotherChatIsRunning =
+    pipelineOccupied &&
+    Boolean(pipelineState.activeChatId) &&
+    pipelineState.activeChatId !== chatId;
+  const runningChatTitle =
+    agentState.chats.find((chat) => chat.id === pipelineState.activeChatId)
+      ?.title || "another chat";
   const selectedModel = models.find((item) => item.path === model);
   const activeGoal = agentState.goals.find(
     (item) => item.chatId === chatId && item.status === "active",
@@ -749,8 +826,75 @@ export function AiPanel({
     setQueueDraft("");
     setSchedulePrompt("");
     setScheduleAt("");
+    setOpenChatIds((current) =>
+      current.includes(chat.id) ? current : [...current, chat.id],
+    );
+    onChatOpened?.(chat.id);
     if (closeWorkspace) setWorkspaceOpen(false);
     queueTimer.current = setTimeout(() => void runNextQueued(), 150);
+  };
+
+  const closeChatTab = (closingId: string) => {
+    const closingIndex = orderedOpenChatIds.indexOf(closingId);
+    const remaining = orderedOpenChatIds.filter((id) => id !== closingId);
+    setOpenChatIds(remaining);
+    setPinnedChatIds((current) => current.filter((id) => id !== closingId));
+    setChatTabMenuId("");
+    if (closingId !== chatIdRef.current) return;
+    const fallbackId =
+      remaining[Math.min(Math.max(0, closingIndex), remaining.length - 1)] ||
+      agentState.chats
+        .slice()
+        .reverse()
+        .find((chat) => chat.id !== closingId)?.id;
+    const fallback = agentState.chats.find((chat) => chat.id === fallbackId);
+    if (fallback) chooseChat(fallback, false);
+    else {
+      // A project always keeps one active chat. With no alternative, closing
+      // the sole tab simply collapses the tab strip instead of losing context.
+      setOpenChatIds([closingId]);
+    }
+  };
+
+  const toggleChatTabMenu = (
+    targetChatId: string,
+    trigger: HTMLButtonElement,
+  ) => {
+    if (chatTabMenuId === targetChatId) {
+      setChatTabMenuId("");
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 190;
+    setChatTabMenuPosition({
+      top: Math.min(rect.bottom + 8, window.innerHeight - 176),
+      left: Math.max(
+        10,
+        Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 10),
+      ),
+    });
+    setChatTabMenuId(targetChatId);
+  };
+
+  const togglePinnedChat = (targetChatId: string) => {
+    setOpenChatIds((current) =>
+      current.includes(targetChatId) ? current : [...current, targetChatId],
+    );
+    setPinnedChatIds((current) =>
+      current.includes(targetChatId)
+        ? current.filter((id) => id !== targetChatId)
+        : [...current, targetChatId],
+    );
+    setChatTabMenuId("");
+  };
+
+  const toggleFavoriteChat = async (chat: AiChatThread) => {
+    await window.oscode.updateAiChatMetadata(chat.id, {
+      favorite: !chat.favorite,
+    });
+    await refreshAgentState();
+    setChatTabMenuId("");
+    setStatus(chat.favorite ? "Removed from favorites" : "Added to favorites");
   };
 
   useEffect(() => {
@@ -813,14 +957,11 @@ export function AiPanel({
     };
   }, []);
   useEffect(() => {
-    if (
-      chatId &&
-      pipelineState.activeChatId === chatId &&
-      pipelineState.state !== "idle"
-    ) {
-      busyRef.current = true;
-      setBusy(true);
-    }
+    if (!chatId) return;
+    const activeChatBusy =
+      pipelineState.activeChatId === chatId && pipelineState.state !== "idle";
+    busyRef.current = activeChatBusy;
+    setBusy(activeChatBusy);
   }, [chatId, pipelineState.activeChatId, pipelineState.state]);
   useEffect(() => {
     if (!workspaceMode || !permissionsDrawerOpen) return;
@@ -884,14 +1025,65 @@ export function AiPanel({
     setMessages([]);
     setContextSummary("");
     setPermissionsDrawerOpen(false);
+    setChatTabMenuId("");
+    setOpenChatIds([]);
+    setPinnedChatIds([]);
+    chatTabsReadyRef.current = false;
     if (projectName)
       void refreshAgentState()
         .then((next) => {
+          const stored = readStoredChatTabs(storedChatTabsKey);
+          const available = new Set(next.chats.map((chat) => chat.id));
+          const restoredOpenIds = uniqueChatIds(
+            stored.openChatIds.filter((id) => available.has(id)),
+          );
+          const restoredPinnedIds = uniqueChatIds(
+            stored.pinnedChatIds.filter((id) => available.has(id)),
+          );
           const latest = next.chats.at(-1);
-          if (latest) chooseChat(latest);
+          const restoredActive = next.chats.find(
+            (chat) => chat.id === stored.activeChatId,
+          );
+          const target = restoredActive || latest;
+          if (target) {
+            setOpenChatIds(
+              restoredOpenIds.includes(target.id)
+                ? restoredOpenIds
+                : [...restoredOpenIds, target.id],
+            );
+            setPinnedChatIds(restoredPinnedIds);
+            chooseChat(target);
+          }
+          chatTabsReadyRef.current = true;
         })
         .catch(() => undefined);
-  }, [projectName]);
+  }, [projectName, storedChatTabsKey]);
+
+  useEffect(() => {
+    if (!projectName || !chatTabsReadyRef.current) return;
+    const available = new Set(agentState.chats.map((chat) => chat.id));
+    const open = uniqueChatIds(
+      [...openChatIds, chatId].filter((id) => available.has(id)),
+    );
+    const pinned = uniqueChatIds(
+      pinnedChatIds.filter((id) => open.includes(id)),
+    );
+    window.localStorage.setItem(
+      storedChatTabsKey,
+      JSON.stringify({
+        openChatIds: open,
+        pinnedChatIds: pinned,
+        activeChatId: available.has(chatId) ? chatId : "",
+      } satisfies StoredChatTabs),
+    );
+  }, [
+    agentState.chats,
+    chatId,
+    openChatIds,
+    pinnedChatIds,
+    projectName,
+    storedChatTabsKey,
+  ]);
   useEffect(() => {
     const wasBusy = previousBusyRef.current;
     previousBusyRef.current = busy;
@@ -1048,11 +1240,22 @@ export function AiPanel({
       setAddMenuOpen(false);
       setOllamaPickerOpen(false);
       setCustomListOpen(false);
+      setChatTabMenuId("");
       if (expanded) setExpanded(false);
     };
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [browserAccess, computerAccess, expanded]);
+  useEffect(() => {
+    if (!chatTabMenuId) return;
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest(".ai-chat-tab-menu, .ai-chat-tab-more")) return;
+      setChatTabMenuId("");
+    };
+    document.addEventListener("pointerdown", closeMenu);
+    return () => document.removeEventListener("pointerdown", closeMenu);
+  }, [chatTabMenuId]);
   useEffect(() => {
     const openRequestedChat = (event: Event) => {
       const requested = (event as CustomEvent<string>).detail;
@@ -1075,7 +1278,6 @@ export function AiPanel({
       }
       if (!chat || chat.id === chatIdRef.current) return;
       chooseChat(chat, false);
-      onChatOpened?.();
     })();
     return () => {
       cancelled = true;
@@ -1762,7 +1964,9 @@ export function AiPanel({
   };
 
   const runNextQueued = async () => {
-    if (busyRef.current) {
+    const currentPipeline = await window.oscode.aiPipelineState();
+    setPipelineState(currentPipeline);
+    if (busyRef.current || currentPipeline.state !== "idle") {
       scheduleQueueRun(250);
       return;
     }
@@ -1894,7 +2098,18 @@ export function AiPanel({
   };
 
   const retryLastResponse = async () => {
-    if (busyRef.current) return;
+    const currentPipeline = await window.oscode
+      .aiPipelineState()
+      .catch(() => pipelineState);
+    setPipelineState(currentPipeline);
+    if (busyRef.current || currentPipeline.state !== "idle") {
+      const blockingTitle =
+        agentState.chats.find(
+          (chat) => chat.id === currentPipeline.activeChatId,
+        )?.title || "another chat";
+      setStatus(`Wait for ${blockingTitle} to finish before retrying`);
+      return;
+    }
     const current = messagesRef.current;
     if (current.at(-1)?.role !== "assistant") return;
     let userIndex = -1;
@@ -1925,12 +2140,24 @@ export function AiPanel({
       (attachments.length ? "Review the attached files locally." : "");
     if (!text) return;
     if (await handleCommand(text)) return;
-    if (busy) {
+    const currentPipeline = await window.oscode
+      .aiPipelineState()
+      .catch(() => pipelineState);
+    setPipelineState(currentPipeline);
+    if (busyRef.current || currentPipeline.state !== "idle") {
+      const blockingTitle =
+        agentState.chats.find(
+          (chat) => chat.id === currentPipeline.activeChatId,
+        )?.title || "another chat";
       await window.oscode.addAiQueue(chatId, text);
       setInput("");
       setAttachments([]);
       setPermissionsDrawerOpen(false);
-      setStatus("Message queued");
+      setStatus(
+        currentPipeline.activeChatId && currentPipeline.activeChatId !== chatId
+          ? `Waiting for ${blockingTitle} to finish · message queued`
+          : "Message queued",
+      );
       await refreshAgentState();
       scheduleQueueRun();
       return;
@@ -2255,15 +2482,101 @@ export function AiPanel({
       </div>
       {controlsTarget && createPortal(headActions, controlsTarget)}
 
+      {openChatTabs.length > 1 && (
+        <div
+          className="ai-chat-tab-strip horizontal-menu-scroll"
+          data-horizontal-menu
+          role="tablist"
+          aria-label="Open chats"
+        >
+          {openChatTabs.map((chat) => {
+            const pinned = pinnedChatIds.includes(chat.id);
+            return (
+              <div
+                className={`ai-chat-tab${chat.id === chatId ? " active" : ""}`}
+                key={chat.id}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={chat.id === chatId}
+                  title={chat.title}
+                  onClick={() => chooseChat(chat, false)}
+                >
+                  {pinned && <FeatherIcon icon="bookmark" size="13" />}
+                  <span>{chat.title || "New chat"}</span>
+                </button>
+                <button
+                  type="button"
+                  className="ai-chat-tab-more"
+                  aria-label={`Chat options for ${chat.title || "New chat"}`}
+                  aria-expanded={chatTabMenuId === chat.id}
+                  onClick={(event) =>
+                    toggleChatTabMenu(chat.id, event.currentTarget)
+                  }
+                >
+                  <FeatherIcon icon="more-horizontal" size="15" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {chatTabMenuChat &&
+        createPortal(
+          <div
+            className="ai-chat-tab-menu"
+            role="menu"
+            aria-label={`Options for ${chatTabMenuChat.title || "New chat"}`}
+            style={chatTabMenuPosition}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => togglePinnedChat(chatTabMenuChat.id)}
+            >
+              <FeatherIcon icon="bookmark" size="16" />
+              {pinnedChatIds.includes(chatTabMenuChat.id)
+                ? "Unpin chat"
+                : "Pin chat"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => void toggleFavoriteChat(chatTabMenuChat)}
+            >
+              <FeatherIcon icon="star" size="16" />
+              {chatTabMenuChat.favorite ? "Remove favorite" : "Favorite"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => closeChatTab(chatTabMenuChat.id)}
+            >
+              <FeatherIcon icon="x" size="16" /> Close chat
+            </button>
+          </div>,
+          document.body,
+        )}
+
       {!workspaceMode && renderModelToggle("ai-model-size-picker")}
 
       {tierPickerOpen &&
         !workspaceMode &&
         renderTierPicker("ai-model-size-picker")}
-      {pipelineState.state === "waiting" && (
+      {pipelineState.state === "waiting" && !anotherChatIsRunning && (
         <div className="ai-pipeline-banner" role="status" aria-live="polite">
           <FeatherIcon icon="clock" size="17" />
           <span>{pipelineState.label}</span>
+        </div>
+      )}
+      {anotherChatIsRunning && (
+        <div className="ai-pipeline-banner" role="status" aria-live="polite">
+          <FeatherIcon icon="clock" size="17" />
+          <span>
+            {runningChatTitle} is finishing. Messages sent here stay queued.
+          </span>
         </div>
       )}
       <span className="sr-only" data-ai-selected-model aria-live="polite">
@@ -3547,7 +3860,11 @@ export function AiPanel({
           messages.at(-1)?.role === "assistant" &&
           messages.some((message) => message.role === "user") && (
             <div className="ai-response-retry-row">
-              <button type="button" onClick={() => void retryLastResponse()}>
+              <button
+                type="button"
+                disabled={pipelineOccupied}
+                onClick={() => void retryLastResponse()}
+              >
                 <FeatherIcon icon="refresh-cw" size="14" />
                 Retry response
               </button>
@@ -4152,7 +4469,7 @@ export function AiPanel({
           aria-label="Message local AI"
           placeholder={
             projectName
-              ? busy
+              ? busyRef.current || pipelineOccupied
                 ? "Queue the next message…"
                 : "Ask, set a goal, or enter a command…"
               : "Open a project first"
@@ -4190,10 +4507,18 @@ export function AiPanel({
           disabled={
             (!input.trim() && !attachments.length) || !model || !projectName
           }
-          aria-label={busy ? "Queue message" : "Send message"}
+          aria-label={
+            busyRef.current || pipelineOccupied
+              ? "Queue message"
+              : "Send message"
+          }
         >
           <FeatherIcon
-            icon={busy ? "corner-down-left" : "arrow-up"}
+            icon={
+              busyRef.current || pipelineOccupied
+                ? "corner-down-left"
+                : "arrow-up"
+            }
             size="17"
           />
         </button>

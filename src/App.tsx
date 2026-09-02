@@ -993,6 +993,7 @@ export function App() {
       width={0}
       side="right"
       projectName="osChat Workspace"
+      projectKey="osChat Workspace"
       openChatId={activeChatId}
       onEngine={(engine) => {
         setAiEngine(engine);
@@ -1016,7 +1017,10 @@ export function App() {
         setNotice(message);
         addNotification("osChat", message, "info");
       }}
-      onChatOpened={() => void refreshAgentState()}
+      onChatOpened={(openedChatId) => {
+        if (openedChatId) setActiveChatId(openedChatId);
+        void refreshAgentState();
+      }}
       onAttentionChange={setAiAttention}
       onOpenArtifact={(artifact) => void openChatArtifact(artifact)}
     />

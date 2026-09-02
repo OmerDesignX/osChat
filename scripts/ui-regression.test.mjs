@@ -341,7 +341,10 @@ test("the same AI collaborator powers chat and productivity without developer te
 
 test("one persistent chat pipeline survives navigation and queues follow-ups", () => {
   assert.match(app, /key="oschat-shared-ai"/);
-  assert.match(aiPanel, /if \(busy\) \{[\s\S]*?addAiQueue\(chatId, text\)/);
+  assert.match(
+    aiPanel,
+    /aiPipelineState\(\)[\s\S]*?if \(busyRef\.current \|\| currentPipeline\.state !== "idle"\) \{[\s\S]*?addAiQueue\(chatId, text\)/,
+  );
   assert.match(aiPanel, /const executionChatId = chatIdRef\.current/);
   assert.match(aiPanel, /chatIdRef\.current === executionChatId/);
   assert.match(aiPanel, /const runNextQueued = async/);
