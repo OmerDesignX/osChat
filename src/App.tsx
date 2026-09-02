@@ -870,6 +870,8 @@ export function App() {
     () =>
       window.oscode.onMenuAction((action) => {
         if (action === "new-chat") void newChat();
+        else if (action === "show-chats") setView("chat");
+        else if (action === "show-notes") setView(notesView);
         else if (action === "new-document") void createArtifact("document");
         else if (action === "new-spreadsheet")
           void createArtifact("spreadsheet");
@@ -886,6 +888,12 @@ export function App() {
       }),
     [],
   );
+  useEffect(() => {
+    if (window.oscode.platform !== "darwin") return;
+    void window.oscode.setTouchBarState({
+      section: view === "chat" ? "chats" : "notes",
+    });
+  }, [view]);
   const filteredChats = useMemo(() => {
     const query = chatSearch.trim().toLowerCase();
     return agentState.chats.filter(

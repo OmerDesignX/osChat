@@ -42,6 +42,7 @@ import { PlatformioService } from "./platformio.js";
 import { defaultPreferences, validPreferences } from "./preferences.js";
 import { guardBrokenOutputPipe } from "./process-output.js";
 import { AppUpdateService } from "./updater.js";
+import { installOsChatTouchBar, type TouchBarController } from "./touch-bar.js";
 import { SaveHistoryStore } from "./save-history.js";
 import { McpClientService } from "./mcp-client.js";
 import { assertReceiveOnlyPublicUrl } from "./outbound-guard.js";
@@ -101,6 +102,7 @@ type WindowContext = {
   confirmOpen: boolean;
 };
 const windowContexts = new Map<number, WindowContext>();
+const touchBarControllers = new Map<number, TouchBarController>();
 const projectWatchers = new Map<number, FSWatcher>();
 type MediaPreviewEntry = {
   file: string;
@@ -1574,6 +1576,9 @@ function createWindow(show = true, restoreLastProject = true) {
     allowClose: false,
     confirmOpen: false,
   });
+  const touchBarController = installOsChatTouchBar(window);
+  if (touchBarController)
+    touchBarControllers.set(webContentsId, touchBarController);
   window.on("focus", () => {
     mainWindow = window;
     projectRoot = windowContexts.get(webContentsId)?.projectRoot || "";
@@ -1661,6 +1666,8 @@ function createWindow(show = true, restoreLastProject = true) {
     });
   });
   window.on("closed", () => {
+    touchBarControllers.get(webContentsId)?.dispose();
+    touchBarControllers.delete(webContentsId);
     const ownerId = webContentsId;
     for (const [token, entry] of mediaPreviewEntries)
       if (entry.ownerId === ownerId) mediaPreviewEntries.delete(token);
@@ -3245,6 +3252,10 @@ function registerIpc() {
       return true;
     },
   );
+  ipcMain.handle("app:set-touch-bar-state", (event, rawState: unknown) => {
+    touchBarControllers.get(event.sender.id)?.update(rawState);
+    return process.platform === "darwin";
+  });
   ipcMain.on("app:set-dirty", (event, dirty: unknown) => {
     if (typeof dirty !== "boolean") return;
     const context = windowContexts.get(event.sender.id);

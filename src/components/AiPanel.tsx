@@ -523,6 +523,7 @@ export function AiPanel({
   const queueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const steeringRef = useRef(false);
   const stoppingRef = useRef(false);
+  const touchBarActionsRef = useRef<Record<string, () => void>>({});
   const requestEpochRef = useRef(0);
   const tierPickerInitialized = useRef(false);
 
@@ -919,6 +920,41 @@ export function AiPanel({
   useEffect(() => {
     busyRef.current = busy;
   }, [busy]);
+  useEffect(
+    () =>
+      window.oscode.onMenuAction((action) =>
+        touchBarActionsRef.current[action]?.(),
+      ),
+    [],
+  );
+  useEffect(() => {
+    if (window.oscode.platform !== "darwin") return;
+    void window.oscode.setTouchBarState({
+      busy,
+      canAttach: Boolean(projectName && attachments.length < 6),
+      canSend: Boolean(
+        projectName &&
+        model &&
+        (input.trim().length > 0 || attachments.length > 0),
+      ),
+      canRetry: Boolean(
+        !busy &&
+        !permissionRequest &&
+        pendingEdits.length === 0 &&
+        messages.at(-1)?.role === "assistant" &&
+        messages.some((message) => message.role === "user"),
+      ),
+    });
+  }, [
+    attachments.length,
+    busy,
+    input,
+    messages,
+    model,
+    pendingEdits.length,
+    permissionRequest,
+    projectName,
+  ]);
   useEffect(() => {
     capabilityRef.current = {
       editMode,
@@ -1846,6 +1882,17 @@ export function AiPanel({
     return false;
   };
 
+  const stopResponse = () => {
+    stoppingRef.current = true;
+    requestEpochRef.current += 1;
+    liveActionsRef.current = [];
+    setLiveActions([]);
+    busyRef.current = false;
+    setBusy(false);
+    setStatus("Stopped");
+    void window.oscode.stopAi();
+  };
+
   const retryLastResponse = async () => {
     if (busyRef.current) return;
     const current = messagesRef.current;
@@ -1907,6 +1954,13 @@ export function AiPanel({
     setStatus("Steering next");
     await refreshAgentState();
     scheduleQueueRun(50);
+  };
+
+  touchBarActionsRef.current = {
+    "chat-attach": () => attachmentInputRef.current?.click(),
+    "chat-send": () => composerInputRef.current?.form?.requestSubmit(),
+    "chat-stop": stopResponse,
+    "chat-retry": () => void retryLastResponse(),
   };
 
   const grantPermission = async (scope: AiPermissionScope) => {
@@ -3556,16 +3610,7 @@ export function AiPanel({
             <button
               type="button"
               className="ai-stop-button"
-              onClick={() => {
-                stoppingRef.current = true;
-                requestEpochRef.current += 1;
-                liveActionsRef.current = [];
-                setLiveActions([]);
-                busyRef.current = false;
-                setBusy(false);
-                setStatus("Stopped");
-                void window.oscode.stopAi();
-              }}
+              onClick={stopResponse}
             >
               <FeatherIcon icon="square" size="13" />
               Stop

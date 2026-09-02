@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld("oscode", {
   setDirtyState: (dirty: boolean) => ipcRenderer.send("app:set-dirty", dirty),
   setAppAttentionBadge: (count: number, kind: string) =>
     ipcRenderer.invoke("app:set-attention-badge", count, kind),
+  setTouchBarState: (state: Record<string, unknown>) =>
+    ipcRenderer.invoke("app:set-touch-bar-state", state),
   confirmDiscardChanges: (detail: string) =>
     ipcRenderer.invoke("dialog:confirm-discard", detail),
   ensureChatWorkspace: () => ipcRenderer.invoke("workspace:ensure"),
