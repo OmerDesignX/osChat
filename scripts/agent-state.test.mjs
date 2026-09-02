@@ -127,6 +127,27 @@ test("conversation permissions do not cross chats and always stays project scope
   );
 });
 
+test("concurrent empty-chat requests resolve to one persisted chat", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "oscode-empty-chat-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const store = new AgentStateStore(root);
+  const [first, second] = await Promise.all([
+    store.ensureEmptyChat("C:/project"),
+    store.ensureEmptyChat("C:/project"),
+  ]);
+  assert.equal(first.id, second.id);
+  assert.equal((await store.state("C:/project")).chats.length, 1);
+  await store.saveChat(
+    first.id,
+    "C:/project",
+    [{ role: "user", content: "Start working" }],
+    "",
+  );
+  const next = await store.ensureEmptyChat("C:/project");
+  assert.notEqual(next.id, first.id);
+  assert.equal((await store.state("C:/project")).chats.length, 2);
+});
+
 test("goals, queues, and schedules stay owned by their chat", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "oscode-chat-work-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));

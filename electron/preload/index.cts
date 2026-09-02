@@ -90,7 +90,8 @@ contextBridge.exposeInMainWorld("oscode", {
   downloadOsCodeModel: (tier: string) =>
     ipcRenderer.invoke("ai:download-oscode-model", tier),
   aiAgentState: () => ipcRenderer.invoke("ai:agent-state"),
-  createAiChat: (title?: string) => ipcRenderer.invoke("ai:create-chat", title),
+  createAiChat: (title?: string, reuseEmpty = false) =>
+    ipcRenderer.invoke("ai:create-chat", title, reuseEmpty),
   saveAiChat: (id: string, messages: unknown, contextSummary: string) =>
     ipcRenderer.invoke("ai:save-chat", id, messages, contextSummary),
   updateAiChatMetadata: (id: string, metadata: unknown) =>

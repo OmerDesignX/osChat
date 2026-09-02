@@ -409,6 +409,42 @@ export class AgentStateStore {
     });
   }
 
+  ensureEmptyChat(projectRoot: string, title = "New chat") {
+    return this.update((state) => {
+      const cleanTitle = text(title, 120) || "New chat";
+      if (cleanTitle === "New chat") {
+        const existing = state.chats
+          .slice()
+          .reverse()
+          .find(
+            (chat) =>
+              chat.projectRoot === projectRoot &&
+              chat.title === "New chat" &&
+              chat.messages.length === 0 &&
+              !chat.contextSummary.trim() &&
+              !state.goals.some((item) => item.chatId === chat.id) &&
+              !state.queue.some((item) => item.chatId === chat.id) &&
+              !state.schedules.some((item) => item.chatId === chat.id),
+          );
+        if (existing) return existing;
+      }
+      const now = new Date().toISOString();
+      const chat: AiChatThread = {
+        id: crypto.randomUUID(),
+        title: cleanTitle,
+        folder: "",
+        favorite: false,
+        projectRoot,
+        messages: [],
+        contextSummary: "",
+        createdAt: now,
+        updatedAt: now,
+      };
+      state.chats.push(chat);
+      return chat;
+    });
+  }
+
   saveChat(
     id: string,
     projectRoot: string,

@@ -27,6 +27,30 @@ const artifactBlock = /```oschat-(?:artifact|widget)\s*\n([\s\S]*?)```/gi;
 const websiteIconCache = new Map<string, string>();
 const websiteIconRequests = new Map<string, Promise<string>>();
 
+function artifactMarkdown(content: string) {
+  const clean = DOMPurify.sanitize(marked.parse(content) as string, {
+    FORBID_TAGS: [
+      "audio",
+      "embed",
+      "iframe",
+      "img",
+      "object",
+      "style",
+      "video",
+    ],
+  });
+  const document = new DOMParser().parseFromString(clean, "text/html");
+  for (const link of document.querySelectorAll("a")) {
+    const href = link.getAttribute("href") || "";
+    if (!/^https:\/\//i.test(href)) link.removeAttribute("href");
+    else {
+      link.setAttribute("rel", "noreferrer noopener");
+      link.setAttribute("target", "_blank");
+    }
+  }
+  return document.body.innerHTML;
+}
+
 function websiteOrigin(raw: string) {
   try {
     const url = new URL(raw);
@@ -108,6 +132,10 @@ function ArtifactPreview({
     ? artifact.values.slice(0, 12).map((value) => Number(value) || 0)
     : [];
   const maximum = Math.max(1, ...values.map((value) => Math.abs(value)));
+  const contentHtml = useMemo(
+    () => artifactMarkdown(artifact.content?.slice(0, 12_000) || ""),
+    [artifact.content],
+  );
   const normalizedQuery = tableQuery.trim().toLocaleLowerCase();
   const visibleRows = rows
     .filter(
@@ -236,10 +264,18 @@ function ArtifactPreview({
           ))}
         </div>
       )}
-      {artifact.content && (
-        <div className="chat-artifact-copy">
-          {artifact.content.slice(0, 1_200)}
-        </div>
+      {contentHtml && (
+        <div
+          className="chat-artifact-copy ai-formatted-copy"
+          onClick={(event) => {
+            const link = (event.target as HTMLElement).closest("a");
+            const href = link?.getAttribute("href") || "";
+            if (!/^https:\/\//i.test(href)) return;
+            event.preventDefault();
+            void window.oscode.openExternalUrl(href);
+          }}
+          dangerouslySetInnerHTML={{ __html: contentHtml }}
+        />
       )}
     </section>
   );

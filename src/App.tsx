@@ -28,6 +28,7 @@ import {
   patchChatCollection,
 } from "./lib/chat-collection-actions";
 import { publicAssistantText } from "./lib/public-assistant-text";
+import { chatListPreview } from "./lib/chat-list-preview";
 import type {
   AgentActivity,
   AiAgentState,
@@ -643,7 +644,7 @@ export function App() {
   };
 
   const newChat = async () => {
-    const chat = await window.oscode.createAiChat();
+    const chat = await window.oscode.createAiChat(undefined, true);
     setView("chat");
     setActiveChatId(chat.id);
     setAgentState(await window.oscode.aiAgentState());
@@ -712,7 +713,8 @@ export function App() {
         setAgentState(next);
         if (activeChatId === chatAction.chat.id) {
           const nextChat =
-            next.chats[0] || (await window.oscode.createAiChat());
+            next.chats[0] ||
+            (await window.oscode.createAiChat(undefined, true));
           if (!next.chats.length)
             setAgentState(await window.oscode.aiAgentState());
           setActiveChatId(nextChat.id);
@@ -1332,92 +1334,98 @@ export function App() {
                 </button>
               </header>
               <div>
-                {filteredChats.map((chat) => (
-                  <article
-                    key={chat.id}
-                    className={`${chat.id === activeChatId ? "active" : ""}${
-                      chat.favorite ? " favorite" : ""
-                    }`.trim()}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveChatId(chat.id);
-                        setView("chat");
-                      }}
+                {filteredChats.map((chat) => {
+                  const preview = chatListPreview(
+                    publicAssistantText(chat.messages.at(-1)?.content || ""),
+                  );
+                  return (
+                    <article
+                      key={chat.id}
+                      className={`${chat.id === activeChatId ? "active" : ""}${
+                        chat.favorite ? " favorite" : ""
+                      }`.trim()}
                     >
-                      <b>{chat.title || "New chat"}</b>
-                      <small>
-                        {publicAssistantText(
-                          chat.messages.at(-1)?.content || "",
-                        ).slice(0, 70) || "No messages yet"}
-                      </small>
-                    </button>
-                    {chat.favorite && (
                       <button
                         type="button"
-                        className="chat-favorite-toggle"
-                        aria-label={`Remove ${chat.title || "New chat"} from favorites`}
-                        title="Remove from favorites"
-                        onClick={() => void toggleChatFavorite(chat)}
+                        onClick={() => {
+                          setActiveChatId(chat.id);
+                          setView("chat");
+                        }}
                       >
-                        <FeatherIcon icon="star" size="16" />
+                        <b>{chat.title || "New chat"}</b>
+                        {preview !== null && (
+                          <small>
+                            {preview.slice(0, 70) || "No messages yet"}
+                          </small>
+                        )}
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="item-more"
-                      aria-label={`Options for ${chat.title}`}
-                      onClick={(event) =>
-                        toggleItemMenu(`chat:${chat.id}`, event.currentTarget)
-                      }
-                    >
-                      <FeatherIcon icon="more-horizontal" size="17" />
-                    </button>
-                    {itemMenu === `chat:${chat.id}` &&
-                      createPortal(
-                        <div
-                          className="sidebar-item-menu sidebar-item-menu-portal"
-                          style={itemMenuPosition}
+                      {chat.favorite && (
+                        <button
+                          type="button"
+                          className="chat-favorite-toggle"
+                          aria-label={`Remove ${chat.title || "New chat"} from favorites`}
+                          title="Remove from favorites"
+                          onClick={() => void toggleChatFavorite(chat)}
                         >
-                          <button
-                            type="button"
-                            onClick={() => openChatAction("rename", chat)}
-                          >
-                            <FeatherIcon icon="edit-3" size="15" /> Rename
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void toggleChatFavorite(chat)}
-                          >
-                            <FeatherIcon icon="star" size="15" />{" "}
-                            {chat.favorite ? "Remove favorite" : "Favorite"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openChatAction("move", chat)}
-                          >
-                            <FeatherIcon icon="folder" size="15" /> Move to
-                            folder
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void duplicateChat(chat)}
-                          >
-                            <FeatherIcon icon="copy" size="15" /> Duplicate
-                          </button>
-                          <button
-                            type="button"
-                            className="danger"
-                            onClick={() => openChatAction("delete", chat)}
-                          >
-                            <FeatherIcon icon="trash-2" size="15" /> Delete
-                          </button>
-                        </div>,
-                        document.querySelector(".oschat-app") || document.body,
+                          <FeatherIcon icon="star" size="16" />
+                        </button>
                       )}
-                  </article>
-                ))}
+                      <button
+                        type="button"
+                        className="item-more"
+                        aria-label={`Options for ${chat.title}`}
+                        onClick={(event) =>
+                          toggleItemMenu(`chat:${chat.id}`, event.currentTarget)
+                        }
+                      >
+                        <FeatherIcon icon="more-horizontal" size="17" />
+                      </button>
+                      {itemMenu === `chat:${chat.id}` &&
+                        createPortal(
+                          <div
+                            className="sidebar-item-menu sidebar-item-menu-portal"
+                            style={itemMenuPosition}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => openChatAction("rename", chat)}
+                            >
+                              <FeatherIcon icon="edit-3" size="15" /> Rename
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void toggleChatFavorite(chat)}
+                            >
+                              <FeatherIcon icon="star" size="15" />{" "}
+                              {chat.favorite ? "Remove favorite" : "Favorite"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openChatAction("move", chat)}
+                            >
+                              <FeatherIcon icon="folder" size="15" /> Move to
+                              folder
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void duplicateChat(chat)}
+                            >
+                              <FeatherIcon icon="copy" size="15" /> Duplicate
+                            </button>
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={() => openChatAction("delete", chat)}
+                            >
+                              <FeatherIcon icon="trash-2" size="15" /> Delete
+                            </button>
+                          </div>,
+                          document.querySelector(".oschat-app") ||
+                            document.body,
+                        )}
+                    </article>
+                  );
+                })}
                 {!filteredChats.length && (
                   <p>
                     {chatSearch.trim() || collectionFilter !== "all"

@@ -498,7 +498,7 @@ declare global {
         tier: Exclude<AiModelTier, "custom">,
       ): Promise<AiModel>;
       aiAgentState(): Promise<AiAgentState>;
-      createAiChat(title?: string): Promise<AiChatThread>;
+      createAiChat(title?: string, reuseEmpty?: boolean): Promise<AiChatThread>;
       saveAiChat(
         id: string,
         messages: AiChatMessage[],

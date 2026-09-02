@@ -14,6 +14,7 @@ const main = read("electron/main/index.ts");
 const preload = read("electron/preload/index.cts");
 const ai = read("electron/main/ai.ts");
 const chatCollectionActions = read("src/lib/chat-collection-actions.ts");
+const chatListPreview = read("src/lib/chat-list-preview.ts");
 
 test("AI work survives navigation, hidden windows, and renderer reattachment", () => {
   assert.doesNotMatch(
@@ -268,6 +269,13 @@ test("new chat refreshes and opens an empty conversation immediately", () => {
   );
 });
 
+test("new-chat creation is idempotent and widget protocols stay out of previews", () => {
+  assert.match(app, /createAiChat\(undefined, true\)/);
+  assert.match(aiPanel, /createAiChat\(undefined, true\)/);
+  assert.match(chatListPreview, /oschat-\(\?:artifact\|widget\)/);
+  assert.match(chatListPreview, /hasInteractiveBlock && !publicText \? null/);
+});
+
 test("productivity artifacts are private, bounded, atomic, and recoverably deleted", () => {
   assert.match(main, /chatWorkspaceRoot\(\)/);
   assert.match(main, /20 \* 1024 \* 1024/);
@@ -381,6 +389,23 @@ test("chat can render inert interactive artifacts and opens editable workspaces"
   assert.match(app, /onOpenArtifact/);
 });
 
+test("Qwen answers and document widgets use restrained semantic typography", () => {
+  assert.match(ai, /use real ## section headings and ### subheadings/);
+  assert.match(aiMessage, /artifactMarkdown\(artifact\.content/);
+  assert.match(
+    aiMessage,
+    /dangerouslySetInnerHTML=\{\{ __html: contentHtml \}\}/,
+  );
+  assert.match(
+    styles,
+    /Qwen and other local models render through one restrained reading scale[\s\S]*?font-family: "Playfair Display", Georgia, serif;[\s\S]*?font-size: 18px !important;[\s\S]*?font-size: 16px !important;/,
+  );
+  assert.match(
+    styles,
+    /:where\(\.ai-message-content, \.chat-artifact-copy\)[\s\S]*?font-family: Manrope, sans-serif;[\s\S]*?font-size: 14px !important;/,
+  );
+});
+
 test("the local agent prompt understands osChat artifacts and still acts through tools", () => {
   assert.match(ai, /You are osChat's private local agentic assistant/);
   assert.match(ai, /APP IDENTITY \(highest priority\)/);
@@ -436,6 +461,14 @@ test("update UI appears only for a real available or ready package", () => {
   assert.match(app, /installAppUpdate/);
   assert.match(app, /setAppAutoUpdate/);
   assert.doesNotMatch(app, /state === "idle"[\s\S]{0,80}Update available/);
+  assert.match(
+    styles,
+    /\.oschat-app \.settings-section \.update-actions button\.primary[\s\S]{0,120}background: var\(--accent\) !important;[\s\S]{0,80}color: var\(--onaccent\)/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app\s+\.settings-section\s+\.update-actions\s+button\.primary:hover:not\(:disabled\)[\s\S]{0,180}background: var\(--accent2\) !important;/,
+  );
 });
 
 test("Computer Control keeps a persistent blue banner and red emergency stop", () => {
@@ -494,6 +527,13 @@ test("osCode polish is shared by chat lists, utility panels, and composer action
   assert.match(styles, /\.oschat-app \.ai-action-timeline \{[\s\S]*?gap: 10px/);
 });
 
+test("the chat message bar keeps an even capsule radius as it grows", () => {
+  assert.match(
+    styles,
+    /Keep the message surface a true capsule[\s\S]*?\.oschat-main\.chat-view \.ai-composer \{[\s\S]*?border-radius: 999px !important;/,
+  );
+});
+
 test("long AI panels keep opaque headers fixed above one padded scroll body", () => {
   assert.match(aiPanel, /className="ai-activity-body"/);
   assert.match(aiPanel, /className="ai-permission-body"/);
@@ -515,7 +555,7 @@ test("long AI panels keep opaque headers fixed above one padded scroll body", ()
 test("dropdowns, color swatches, permissions, and model lists share one inset rhythm", () => {
   assert.match(
     styles,
-    /\.oschat-app select \{[\s\S]*?padding: 0 52px 0 18px !important;[\s\S]*?appearance: none !important;[\s\S]*?background-position:/,
+    /\.oschat-app select \{[\s\S]*?padding: 0 52px 0 18px !important;[\s\S]*?appearance: none !important;[\s\S]*?background-image: url\("data:image\/svg\+xml,[\s\S]*?%3Cpath d='m6 9 6 6 6-6'\/[\s\S]*?background-position: calc\(100% - 18px\) center !important;[\s\S]*?background-size: 18px 18px !important;/,
   );
   assert.match(
     styles,

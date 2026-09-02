@@ -1,5 +1,4 @@
-import { app } from "electron";
-import { spawn } from "node:child_process";
+import { app, shell } from "electron";
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
@@ -57,7 +56,10 @@ export class AppUpdateService {
     currentVersion: app.getVersion(),
   };
 
-  constructor(private readonly emit: (status: AppUpdateStatus) => void) {}
+  constructor(
+    private readonly emit: (status: AppUpdateStatus) => void,
+    private readonly quitAfterInstallerLaunch: () => void,
+  ) {}
 
   initialize(enabled: boolean) {
     this.enabled = enabled;
@@ -265,7 +267,7 @@ export class AppUpdateService {
     return isTrustedUpdateUrl(this.enabled, rawUrl);
   }
 
-  installReadyUpdate() {
+  async installReadyUpdate() {
     if (this.status.state !== "ready") return this.getStatus();
     const file = this.downloadedPackage;
     const expectedExtension =
@@ -276,38 +278,27 @@ export class AppUpdateService {
           : ".deb";
     if (!file || path.extname(file).toLowerCase() !== expectedExtension)
       return this.getStatus();
-    const child =
-      process.platform === "win32"
-        ? spawn(file, [], {
-            detached: true,
-            stdio: "ignore",
-            windowsHide: false,
-          })
-        : process.platform === "darwin"
-          ? spawn("/usr/bin/open", [file], {
-              detached: true,
-              stdio: "ignore",
-            })
-          : spawn("xdg-open", [file], {
-              detached: true,
-              stdio: "ignore",
-            });
-    child.unref();
-    this.update({
-      state: "installing",
-      message:
-        process.platform === "win32"
-          ? "The osChat installer is opening; the app will close"
-          : process.platform === "darwin"
-            ? "Installer opened; drag osChat to Applications when prompted"
-            : "Installer opened; approve the package-manager prompt",
-      version: this.status.version,
-      channel: this.status.channel,
-      percent: 100,
-    });
-    if (process.platform === "win32") {
-      const timeout = setTimeout(() => app.quit(), 500);
+    const version = this.status.version;
+    const channel = this.status.channel;
+    try {
+      const launchError = await shell.openPath(file);
+      if (launchError) throw new Error(launchError);
+      this.update({
+        state: "installing",
+        message: "Installer opened; osChat is closing",
+        version,
+        channel,
+        percent: 100,
+      });
+      const timeout = setTimeout(this.quitAfterInstallerLaunch, 150);
       timeout.unref();
+    } catch (error) {
+      this.update({
+        state: "error",
+        message: `Installer failed to open: ${this.cleanError(error)}`,
+        version,
+        channel,
+      });
     }
     return this.getStatus();
   }

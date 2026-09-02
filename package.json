@@ -1,6 +1,6 @@
 {
   "name": "oschat",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A private, local-first AI chat and productivity workspace",
   "desktopName": "studio.oschat.desktop",
   "main": "dist-electron/main/index.js",
