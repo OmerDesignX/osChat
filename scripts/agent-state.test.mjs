@@ -164,6 +164,30 @@ test("concurrent empty-chat requests share one transient draft until first input
   );
 });
 
+test("first queued work materializes a valid transient chat", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "oscode-draft-queue-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const store = new AgentStateStore(root);
+  const draft = await store.ensureEmptyChat("C:/project");
+
+  const queued = await store.addQueue(draft.id, "Answer after the active chat");
+  const state = await store.state("C:/project");
+
+  assert.equal(
+    state.chats.some((chat) => chat.id === draft.id),
+    true,
+  );
+  assert.equal(
+    state.queue.find((item) => item.id === queued.id)?.chatId,
+    draft.id,
+  );
+  assert.equal(
+    (await new AgentStateStore(root).state("C:/project")).chats[0]?.id,
+    draft.id,
+    "queued user work makes the chat durable before the renderer can detach",
+  );
+});
+
 test("goals, queues, and schedules stay owned by their chat", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "oscode-chat-work-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));

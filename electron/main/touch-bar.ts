@@ -5,16 +5,19 @@ import {
   type NativeImage,
 } from "electron";
 
-const accent = "#89cff0";
-const dark = "#24292c";
-const danger = "#d76b7a";
-
 type OsChatTouchBarState = {
   section: "chats" | "notes";
   busy: boolean;
   canAttach: boolean;
   canSend: boolean;
   canRetry: boolean;
+};
+
+type TouchBarAction = {
+  label: string;
+  icon: NativeImage;
+  action: string;
+  enabled: boolean;
 };
 
 export type TouchBarController = {
@@ -70,90 +73,82 @@ export function installOsChatTouchBar(
     stop: touchBarIcon("NSTouchBarRecordStopTemplate"),
     retry: touchBarIcon("NSTouchBarRefreshTemplate"),
   };
-  const newChat = new TouchBar.TouchBarButton({
-    label: "New Chat",
-    icon: icons.newChat,
-    iconPosition: "left",
-    accessibilityLabel: "Start a new chat",
-    backgroundColor: accent,
-    click: () => send("new-chat"),
-  });
-  const attach = new TouchBar.TouchBarButton({
-    label: "Attach",
-    icon: icons.attach,
-    iconPosition: "left",
-    accessibilityLabel: "Attach local media or documents",
-    backgroundColor: dark,
-    click: () => send("chat-attach"),
-  });
-  const sendStop = new TouchBar.TouchBarButton({
-    label: "Send",
-    icon: icons.send,
-    iconPosition: "left",
-    accessibilityLabel: "Send message",
-    backgroundColor: accent,
-    click: () => send(state.busy ? "chat-stop" : "chat-send"),
-  });
-  const retry = new TouchBar.TouchBarButton({
-    label: "Retry",
-    icon: icons.retry,
-    iconPosition: "left",
-    accessibilityLabel: "Retry the last response",
-    backgroundColor: dark,
-    click: () => send("chat-retry"),
-  });
-  const secondaryActions = [
-    { label: "Chats", icon: icons.chats, action: "show-chats" },
-    { label: "Notes", icon: icons.notes, action: "show-notes" },
-    {
-      label: "Document",
-      icon: icons.document,
-      action: "new-document",
-    },
-    {
-      label: "Sheet",
-      icon: icons.spreadsheet,
-      action: "new-spreadsheet",
-    },
-    {
-      label: "Slides",
-      icon: icons.presentation,
-      action: "new-presentation",
-    },
-  ];
-  const secondary = new TouchBar.TouchBarScrubber({
-    items: secondaryActions.map(({ label, icon }) => ({ label, icon })),
+  let actions: TouchBarAction[] = [];
+  const actionStrip = new TouchBar.TouchBarScrubber({
+    items: [],
     mode: "free",
     continuous: false,
     showArrowButtons: true,
     selectedStyle: "background",
-    highlight: (index) => {
-      const item = secondaryActions[index];
-      if (item) send(item.action);
+    select: (index) => {
+      const item = actions[index];
+      if (item?.enabled) send(item.action);
     },
+    highlight: () => undefined,
   });
   const bar = new TouchBar({
-    items: [
-      newChat,
-      secondary,
-      new TouchBar.TouchBarSpacer({ size: "flexible" }),
-      attach,
-      sendStop,
-      retry,
-    ],
+    items: [actionStrip],
   });
   window.setTouchBar(bar);
 
   const render = () => {
-    attach.enabled = state.canAttach && !state.busy;
-    sendStop.enabled = state.busy || state.canSend;
-    sendStop.label = state.busy ? "Stop" : "Send";
-    sendStop.icon = state.busy ? icons.stop : icons.send;
-    sendStop.accessibilityLabel = state.busy
-      ? "Stop the current response"
-      : "Send message";
-    sendStop.backgroundColor = state.busy ? danger : accent;
-    retry.enabled = state.canRetry && !state.busy;
+    actions = [
+      {
+        label: "New Chat",
+        icon: icons.newChat,
+        action: "new-chat",
+        enabled: true,
+      },
+      {
+        label: "Chats",
+        icon: icons.chats,
+        action: "show-chats",
+        enabled: true,
+      },
+      {
+        label: "Notes",
+        icon: icons.notes,
+        action: "show-notes",
+        enabled: true,
+      },
+      {
+        label: "Document",
+        icon: icons.document,
+        action: "new-document",
+        enabled: true,
+      },
+      {
+        label: "Sheet",
+        icon: icons.spreadsheet,
+        action: "new-spreadsheet",
+        enabled: true,
+      },
+      {
+        label: "Slides",
+        icon: icons.presentation,
+        action: "new-presentation",
+        enabled: true,
+      },
+      {
+        label: "Attach",
+        icon: icons.attach,
+        action: "chat-attach",
+        enabled: state.canAttach && !state.busy,
+      },
+      {
+        label: state.busy ? "Stop" : "Send",
+        icon: state.busy ? icons.stop : icons.send,
+        action: state.busy ? "chat-stop" : "chat-send",
+        enabled: state.busy || state.canSend,
+      },
+      {
+        label: "Retry",
+        icon: icons.retry,
+        action: "chat-retry",
+        enabled: state.canRetry && !state.busy,
+      },
+    ];
+    actionStrip.items = actions.map(({ label, icon }) => ({ label, icon }));
   };
   render();
 

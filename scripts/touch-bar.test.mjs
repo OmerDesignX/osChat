@@ -19,13 +19,13 @@ test("osChat exposes native contextual Touch Bar chat controls", () => {
     assert.match(touchBar, new RegExp(label));
   assert.match(touchBar, /state\.busy \? "chat-stop" : "chat-send"/);
   assert.match(touchBar, /Object\.hasOwn\(source, "section"\)/);
-  assert.match(touchBar, /accessibilityLabel/);
   assert.match(touchBar, /nativeImage\.createFromNamedImage/);
-  assert.match(touchBar, /iconPosition: "left"/);
   assert.match(touchBar, /new TouchBar\.TouchBarScrubber/);
   assert.match(touchBar, /mode: "free"/);
   assert.match(touchBar, /showArrowButtons: true/);
-  assert.match(touchBar, /highlight: \(index\)/);
+  assert.match(touchBar, /select: \(index\)/);
+  assert.match(touchBar, /items: \[actionStrip\]/);
+  assert.match(touchBar, /actionStrip\.items = actions\.map/);
   for (const action of ["new-document", "new-spreadsheet", "new-presentation"])
     assert.match(touchBar, new RegExp(`action: "${action}"`));
   assert.match(main, /installOsChatTouchBar\(window\)/);

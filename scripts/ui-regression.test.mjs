@@ -271,7 +271,11 @@ test("new chat refreshes and opens an empty conversation immediately", () => {
   );
   assert.match(
     aiPanel,
-    /const next = await refreshAgentState\(\);[\s\S]*?next\.chats\.find\(\(item\) => item\.id === openChatId\)/,
+    /if \(!chat\) \{\s*const next = await window\.oscode\.aiAgentState\(\);\s*if \(cancelled\) return;\s*chat = next\.chats\.find\(\(item\) => item\.id === openChatId\);\s*if \(chat\) setAgentState\(next\);\s*\}/,
+  );
+  assert.doesNotMatch(
+    aiPanel,
+    /if \(!chat\) \{\s*const next = await refreshAgentState\(\);/,
   );
   assert.match(
     aiPanel,

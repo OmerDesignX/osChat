@@ -17317,7 +17317,7 @@ button > svg * {
 
 .ai-chat-tab > .ai-chat-tab-more:hover,
 .ai-chat-tab > .ai-chat-tab-more:focus-visible {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: transparent;
   color: var(--accent);
 }
 
@@ -17330,7 +17330,8 @@ button > svg * {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--panel) 96%, black 4%);
+  background: var(--overlay-surface, #2b2e2f);
+  color: var(--text, #f0f1f1);
   box-shadow: 0 18px 44px rgb(0 0 0 / 28%);
 }
 

@@ -1272,9 +1272,10 @@ export function AiPanel({
     void (async () => {
       let chat = agentState.chats.find((item) => item.id === openChatId);
       if (!chat) {
-        const next = await refreshAgentState();
+        const next = await window.oscode.aiAgentState();
         if (cancelled) return;
         chat = next.chats.find((item) => item.id === openChatId);
+        if (chat) setAgentState(next);
       }
       if (!chat || chat.id === chatIdRef.current) return;
       chooseChat(chat, false);
@@ -2557,7 +2558,7 @@ export function AiPanel({
               <FeatherIcon icon="x" size="16" /> Close chat
             </button>
           </div>,
-          document.body,
+          document.querySelector(".app") || document.body,
         )}
 
       {!workspaceMode && renderModelToggle("ai-model-size-picker")}
