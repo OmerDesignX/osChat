@@ -197,6 +197,8 @@ export function createBrowserQaBridge(): Window["oscode"] {
     openSecureData: async () => "/qa/osChat data",
     openExternalUrl: async (url: string) => url,
     websiteIcon: async () => "",
+    copyChatOutput: async () => true,
+    downloadChatOutput: async (name: string) => `/qa/exports/${name}`,
     appUpdateStatus: async () => structuredClone(update),
     setAppAutoUpdate: async (enabled: boolean) => {
       update = {

@@ -77,6 +77,20 @@ const labels: Record<AiEngine, string> = {
   pytorch: "PyTorch",
   mlx: "MLX",
 };
+
+function responseDownloadName(content: string) {
+  const label =
+    content
+      .replace(/```[\s\S]*?```/g, "")
+      .split("\n")
+      .map((line) => line.replace(/^#{1,6}\s+/, "").trim())
+      .find(Boolean) || "osChat response";
+  const safe = label
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .slice(0, 80)
+    .trim();
+  return `${safe || "osChat response"}.md`;
+}
 const permissionLabels: Record<AiPermissionKind, string> = {
   "project.read": "Read project files",
   "project.write": "Edit project files",
@@ -1311,6 +1325,7 @@ export function AiPanel({
       });
     if (!desired.length) return;
     const state = await window.oscode.aiAgentState();
+    if (!state.chats.some((item) => item.id === currentChatId)) return;
     let granted = false;
     for (const permission of desired) {
       const exists = state.permissions.some(
@@ -1428,8 +1443,8 @@ export function AiPanel({
     try {
       const activeCapabilities = capabilityOverride || capabilityRef.current;
       const requestSummary = continuation?.contextSummary ?? contextSummary;
-      await ensureCapabilityPermissions(executionChatId, activeCapabilities);
       await saveConversation(next, requestSummary, executionChatId);
+      await ensureCapabilityPermissions(executionChatId, activeCapabilities);
       const response = await window.oscode.aiChat({
         chatId: executionChatId,
         engine,
@@ -1831,6 +1846,31 @@ export function AiPanel({
     return false;
   };
 
+  const retryLastResponse = async () => {
+    if (busyRef.current) return;
+    const current = messagesRef.current;
+    if (current.at(-1)?.role !== "assistant") return;
+    let userIndex = -1;
+    for (let index = current.length - 1; index >= 0; index -= 1) {
+      if (current[index].role === "user") {
+        userIndex = index;
+        break;
+      }
+    }
+    if (userIndex < 0) return;
+    const prompt = current[userIndex];
+    const prior = current.slice(0, userIndex);
+    messagesRef.current = prior;
+    setMessages(prior);
+    setPermissionRequest(null);
+    setPendingEdits([]);
+    permissionContinuation.current = null;
+    liveActionsRef.current = [];
+    setLiveActions([]);
+    setStatus("Regenerating response…");
+    await runPrompt(prompt.content, undefined, prompt.attachments || []);
+  };
+
   const send = async (event: FormEvent) => {
     event.preventDefault();
     const text =
@@ -2074,7 +2114,7 @@ export function AiPanel({
       }}
     >
       <FeatherIcon icon="cpu" size="18" />
-      <span>
+      <span className="ai-footer-label">
         <b>{selectedModel?.name || "Choose a local model"}</b>
         <small>
           {selectedModel?.installed === false
@@ -3372,6 +3412,50 @@ export function AiPanel({
             ) : (
               <p>{message.content}</p>
             )}
+            {message.role === "assistant" && (
+              <footer className="ai-message-output-actions">
+                <button
+                  type="button"
+                  onClick={() =>
+                    void window.oscode
+                      .copyChatOutput(publicAssistantText(message.content))
+                      .then(() => setStatus("Response copied"))
+                      .catch((error) =>
+                        onNotice(
+                          publicAiError(error, "Response could not be copied"),
+                        ),
+                      )
+                  }
+                >
+                  <FeatherIcon icon="copy" size="14" />
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void window.oscode
+                      .downloadChatOutput(
+                        responseDownloadName(message.content),
+                        publicAssistantText(message.content),
+                      )
+                      .then((saved) => {
+                        if (saved) setStatus("Response downloaded");
+                      })
+                      .catch((error) =>
+                        onNotice(
+                          publicAiError(
+                            error,
+                            "Response could not be downloaded",
+                          ),
+                        ),
+                      )
+                  }
+                >
+                  <FeatherIcon icon="download" size="14" />
+                  Download
+                </button>
+              </footer>
+            )}
             {!!message.attachments?.length && (
               <div
                 className="ai-message-images"
@@ -3403,6 +3487,18 @@ export function AiPanel({
             )}
           </article>
         ))}
+        {!busy &&
+          !permissionRequest &&
+          pendingEdits.length === 0 &&
+          messages.at(-1)?.role === "assistant" &&
+          messages.some((message) => message.role === "user") && (
+            <div className="ai-response-retry-row">
+              <button type="button" onClick={() => void retryLastResponse()}>
+                <FeatherIcon icon="refresh-cw" size="14" />
+                Retry response
+              </button>
+            </div>
+          )}
         {busy &&
           liveModelOutput.chatId === chatId &&
           (liveModelOutput.reasoning || liveModelOutput.answer) && (
@@ -3656,7 +3752,7 @@ export function AiPanel({
           >
             <span>
               <FeatherIcon icon="shield" size="16" />
-              <span>
+              <span className="ai-footer-label">
                 <b>Permissions</b>
                 <small>
                   {
@@ -3894,7 +3990,9 @@ export function AiPanel({
               }}
             >
               <FeatherIcon icon="target" size="17" />
-              <span>{activeGoal ? "Goal set" : "Goal"}</span>
+              <span className="ai-footer-label">
+                {activeGoal ? "Goal set" : "Goal"}
+              </span>
               <FeatherIcon
                 icon={goalMenuOpen ? "chevron-down" : "chevron-up"}
                 size="15"

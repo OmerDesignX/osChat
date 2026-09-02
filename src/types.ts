@@ -459,6 +459,8 @@ declare global {
       openSecureData(): Promise<string>;
       openExternalUrl(url: string): Promise<string>;
       websiteIcon(url: string): Promise<string>;
+      copyChatOutput(content: string): Promise<boolean>;
+      downloadChatOutput(name: string, content: string): Promise<string>;
       listMcpServers(): Promise<McpServerConfig[]>;
       saveMcpServer(
         server: Omit<McpServerConfig, "id"> & { id?: string },

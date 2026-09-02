@@ -183,9 +183,18 @@ function messages(value: unknown): AiChatMessage[] {
   });
 }
 
+function hasUserInput(value: AiChatMessage[]) {
+  return value.some(
+    (item) =>
+      item.role === "user" &&
+      (item.content.trim().length > 0 || Boolean(item.attachments?.length)),
+  );
+}
+
 export class AgentStateStore {
   private mutation = Promise.resolve();
   private readonly secure: SecureDataStore;
+  private readonly draftChats = new Map<string, AiChatThread>();
 
   constructor(
     private readonly userData: string,
@@ -281,7 +290,7 @@ export class AgentStateStore {
           chatMessages = messages(body.messages);
           contextSummary = text(body.contextSummary, 64_000);
         }
-        parsedChats.push({
+        const chat: StoredChat = {
           id,
           title: text(input.title, 120) || "New chat",
           folder: text(input.folder, 120),
@@ -292,7 +301,8 @@ export class AgentStateStore {
           createdAt: text(input.createdAt, 40) || now,
           updatedAt: text(input.updatedAt, 40) || now,
           ...(storageLabel ? { storageLabel } : {}),
-        });
+        };
+        if (hasUserInput(chat.messages)) parsedChats.push(chat);
       }
     }
     return {
@@ -367,82 +377,56 @@ export class AgentStateStore {
   }
 
   state(projectRoot: string) {
-    return this.read().then((state) => ({
-      chats: state.chats.filter((item) => item.projectRoot === projectRoot),
-      goals: state.goals.filter((item) =>
-        state.chats.some(
-          (chat) => chat.id === item.chatId && chat.projectRoot === projectRoot,
-        ),
-      ),
-      queue: state.queue.filter((item) =>
-        state.chats.some(
-          (chat) => chat.id === item.chatId && chat.projectRoot === projectRoot,
-        ),
-      ),
-      schedules: state.schedules.filter((item) =>
-        state.chats.some(
-          (chat) => chat.id === item.chatId && chat.projectRoot === projectRoot,
-        ),
-      ),
-      permissions: state.permissions.filter(
+    return this.read().then((state) => {
+      const persistedChats = state.chats.filter(
         (item) => item.projectRoot === projectRoot,
-      ),
-    }));
-  }
-
-  createChat(projectRoot: string, title = "New chat") {
-    return this.update((state) => {
-      const now = new Date().toISOString();
-      const chat: AiChatThread = {
-        id: crypto.randomUUID(),
-        title: text(title, 120) || "New chat",
-        folder: "",
-        favorite: false,
-        projectRoot,
-        messages: [],
-        contextSummary: "",
-        createdAt: now,
-        updatedAt: now,
+      );
+      const draft = this.draftChats.get(projectKey(projectRoot));
+      const chats =
+        draft && !persistedChats.some((item) => item.id === draft.id)
+          ? [draft, ...persistedChats]
+          : persistedChats;
+      return {
+        chats,
+        goals: state.goals.filter((item) =>
+          chats.some((chat) => chat.id === item.chatId),
+        ),
+        queue: state.queue.filter((item) =>
+          chats.some((chat) => chat.id === item.chatId),
+        ),
+        schedules: state.schedules.filter((item) =>
+          chats.some((chat) => chat.id === item.chatId),
+        ),
+        permissions: state.permissions.filter(
+          (item) => item.projectRoot === projectRoot,
+        ),
       };
-      state.chats.push(chat);
-      return chat;
     });
   }
 
-  ensureEmptyChat(projectRoot: string, title = "New chat") {
-    return this.update((state) => {
-      const cleanTitle = text(title, 120) || "New chat";
-      if (cleanTitle === "New chat") {
-        const existing = state.chats
-          .slice()
-          .reverse()
-          .find(
-            (chat) =>
-              chat.projectRoot === projectRoot &&
-              chat.title === "New chat" &&
-              chat.messages.length === 0 &&
-              !chat.contextSummary.trim() &&
-              !state.goals.some((item) => item.chatId === chat.id) &&
-              !state.queue.some((item) => item.chatId === chat.id) &&
-              !state.schedules.some((item) => item.chatId === chat.id),
-          );
-        if (existing) return existing;
-      }
-      const now = new Date().toISOString();
-      const chat: AiChatThread = {
-        id: crypto.randomUUID(),
-        title: cleanTitle,
-        folder: "",
-        favorite: false,
-        projectRoot,
-        messages: [],
-        contextSummary: "",
-        createdAt: now,
-        updatedAt: now,
-      };
-      state.chats.push(chat);
-      return chat;
-    });
+  async createChat(projectRoot: string, title = "New chat") {
+    const now = new Date().toISOString();
+    const chat: AiChatThread = {
+      id: crypto.randomUUID(),
+      title: text(title, 120) || "New chat",
+      folder: "",
+      favorite: false,
+      projectRoot,
+      messages: [],
+      contextSummary: "",
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.draftChats.set(projectKey(projectRoot), chat);
+    return chat;
+  }
+
+  async ensureEmptyChat(projectRoot: string, title = "New chat") {
+    const cleanTitle = text(title, 120) || "New chat";
+    const key = projectKey(projectRoot);
+    const existing = this.draftChats.get(key);
+    if (existing && existing.title === cleanTitle) return existing;
+    return this.createChat(projectRoot, cleanTitle);
   }
 
   saveChat(
@@ -452,16 +436,47 @@ export class AgentStateStore {
     contextSummary: string,
   ) {
     return this.update((state) => {
-      const chat = state.chats.find(
+      const cleanMessages = messages(chatMessages);
+      let chat = state.chats.find(
         (item) => item.id === id && item.projectRoot === projectRoot,
       );
-      if (!chat) throw new Error("Chat was not found");
-      chat.messages = messages(chatMessages);
+      if (!chat) {
+        const key = projectKey(projectRoot);
+        const draft = this.draftChats.get(key);
+        if (!hasUserInput(cleanMessages)) {
+          if (!draft || draft.id !== id) throw new Error("Chat was not found");
+          draft.messages = cleanMessages;
+          draft.contextSummary = text(contextSummary, 64_000);
+          draft.updatedAt = new Date().toISOString();
+          return draft;
+        }
+        const now = new Date().toISOString();
+        chat =
+          draft?.id === id
+            ? draft
+            : {
+                id,
+                title: "New chat",
+                folder: "",
+                favorite: false,
+                projectRoot,
+                messages: [],
+                contextSummary: "",
+                createdAt: now,
+                updatedAt: now,
+              };
+        state.chats.push(chat);
+        if (draft?.id === id) this.draftChats.delete(key);
+      }
+      chat.messages = cleanMessages;
       chat.contextSummary = text(contextSummary, 64_000);
       chat.updatedAt = new Date().toISOString();
       const first = chat.messages.find((item) => item.role === "user");
       if (first && chat.title === "New chat")
-        chat.title = first.content.replace(/\s+/g, " ").slice(0, 60);
+        chat.title =
+          first.content.replace(/\s+/g, " ").trim().slice(0, 60) ||
+          first.attachments?.[0]?.name ||
+          "Attachment";
       return chat;
     });
   }
@@ -471,6 +486,18 @@ export class AgentStateStore {
     projectRoot: string,
     metadata: { title?: unknown; folder?: unknown; favorite?: unknown },
   ) {
+    const key = projectKey(projectRoot);
+    const draft = this.draftChats.get(key);
+    if (draft?.id === id) {
+      if (metadata.title !== undefined)
+        draft.title = text(metadata.title, 120).trim() || "New chat";
+      if (metadata.folder !== undefined)
+        draft.folder = text(metadata.folder, 120).trim();
+      if (metadata.favorite !== undefined)
+        draft.favorite = metadata.favorite === true;
+      draft.updatedAt = new Date().toISOString();
+      return Promise.resolve(draft);
+    }
     return this.update((state) => {
       const chat = state.chats.find(
         (item) => item.id === id && item.projectRoot === projectRoot,
@@ -488,6 +515,11 @@ export class AgentStateStore {
   }
 
   async deleteChat(id: string, projectRoot: string) {
+    const key = projectKey(projectRoot);
+    if (this.draftChats.get(key)?.id === id) {
+      this.draftChats.delete(key);
+      return true;
+    }
     let removedLabel = "";
     const removed = await this.update((state) => {
       const exists = state.chats.some(

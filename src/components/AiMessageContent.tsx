@@ -2,10 +2,23 @@ import { useEffect, useMemo, useState } from "react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { FeatherIcon } from "./FeatherIcon";
+import { MiniWidget } from "./MiniWidget";
+import {
+  isMiniWidgetType,
+  normalizeMiniWidget,
+  type MiniWidgetPayload,
+  type MiniWidgetType,
+} from "../lib/mini-widget";
 
 export type ChatArtifactPayload = {
   type:
-    "document" | "spreadsheet" | "presentation" | "table" | "chart" | "metric";
+    | "document"
+    | "spreadsheet"
+    | "presentation"
+    | "table"
+    | "chart"
+    | "metric"
+    | MiniWidgetType;
   title?: string;
   description?: string;
   headers?: string[];
@@ -16,7 +29,9 @@ export type ChatArtifactPayload = {
   unit?: string;
   content?: string;
   data?: unknown;
-};
+} & Partial<
+  Omit<MiniWidgetPayload, "type" | "title" | "description" | "value">
+>;
 
 type Props = {
   content: string;
@@ -106,7 +121,103 @@ function artifactIcon(type: ChatArtifactPayload["type"]) {
   if (type === "spreadsheet" || type === "table") return "grid";
   if (type === "presentation") return "monitor";
   if (type === "chart" || type === "metric") return "bar-chart-2";
+  if (type === "checklist") return "check-square";
+  if (type === "quiz") return "help-circle";
+  if (type === "poll") return "pie-chart";
+  if (type === "counter") return "hash";
+  if (type === "timer") return "clock";
+  if (type === "flashcards") return "layers";
+  if (type === "calculator") return "sliders";
   return "file-text";
+}
+
+function csvCell(value: unknown) {
+  const source = String(value ?? "");
+  return /[",\r\n]/.test(source) ? `"${source.replace(/"/g, '""')}"` : source;
+}
+
+function safeOutputName(value: string) {
+  return (
+    value
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+      .replace(/^\.+/, "")
+      .trim()
+      .slice(0, 120) || "osChat-output"
+  );
+}
+
+function codeExtension(language: string) {
+  const extensions: Record<string, string> = {
+    bash: "sh",
+    c: "c",
+    cpp: "cpp",
+    css: "css",
+    go: "go",
+    html: "html",
+    java: "java",
+    javascript: "js",
+    js: "js",
+    json: "json",
+    jsx: "jsx",
+    markdown: "md",
+    md: "md",
+    python: "py",
+    py: "py",
+    ruby: "rb",
+    rust: "rs",
+    shell: "sh",
+    sql: "sql",
+    swift: "swift",
+    ts: "ts",
+    tsx: "tsx",
+    typescript: "ts",
+    xml: "xml",
+    yaml: "yml",
+    yml: "yml",
+  };
+  return extensions[language.toLocaleLowerCase()] || "txt";
+}
+
+function artifactOutput(artifact: ChatArtifactPayload, title: string) {
+  const headers = Array.isArray(artifact.headers) ? artifact.headers : [];
+  const rows = Array.isArray(artifact.rows) ? artifact.rows : [];
+  if (artifact.type === "table" || artifact.type === "spreadsheet") {
+    return {
+      name: `${safeOutputName(title)}.csv`,
+      content: [...(headers.length ? [headers] : []), ...rows]
+        .map((row) => row.map(csvCell).join(","))
+        .join("\n"),
+    };
+  }
+  if (artifact.type === "chart") {
+    const labels = Array.isArray(artifact.labels) ? artifact.labels : [];
+    const values = Array.isArray(artifact.values) ? artifact.values : [];
+    return {
+      name: `${safeOutputName(title)}.csv`,
+      content: [
+        "Label,Value",
+        ...values.map(
+          (value, index) =>
+            `${csvCell(labels[index] || index + 1)},${csvCell(value)}`,
+        ),
+      ].join("\n"),
+    };
+  }
+  if (isMiniWidgetType(artifact.type)) {
+    return {
+      name: `${safeOutputName(title)}.json`,
+      content: JSON.stringify(artifact, null, 2),
+    };
+  }
+  const content =
+    artifact.content?.trim() ||
+    (artifact.type === "metric"
+      ? `${title}\n${String(artifact.value ?? "")}${artifact.unit ? ` ${artifact.unit}` : ""}`
+      : JSON.stringify(artifact.data ?? artifact, null, 2));
+  return {
+    name: `${safeOutputName(title)}.${artifact.type === "document" || artifact.type === "presentation" ? "md" : "txt"}`,
+    content,
+  };
 }
 
 function ArtifactPreview({
@@ -121,6 +232,7 @@ function ArtifactPreview({
   const [sortDirection, setSortDirection] = useState<
     "ascending" | "descending"
   >("ascending");
+  const [outputStatus, setOutputStatus] = useState("");
   const title =
     artifact.title?.trim() ||
     artifact.type[0].toUpperCase() + artifact.type.slice(1);
@@ -165,6 +277,25 @@ function ArtifactPreview({
     setSortColumn(column);
     setSortDirection("ascending");
   };
+  const output = useMemo(
+    () => artifactOutput(artifact, title),
+    [artifact, title],
+  );
+  const showOutputStatus = (message: string) => {
+    setOutputStatus(message);
+    window.setTimeout(() => setOutputStatus(""), 1800);
+  };
+  const copyOutput = async () => {
+    await window.oscode.copyChatOutput(output.content);
+    showOutputStatus("Copied");
+  };
+  const downloadOutput = async () => {
+    const saved = await window.oscode.downloadChatOutput(
+      output.name,
+      output.content,
+    );
+    if (saved) showOutputStatus("Downloaded");
+  };
   return (
     <section className="chat-artifact-card" aria-label={`${title} artifact`}>
       <header>
@@ -175,15 +306,36 @@ function ArtifactPreview({
             <small>{artifact.type}</small>
           </span>
         </span>
-        {onOpen &&
-          ["document", "spreadsheet", "presentation"].includes(
-            artifact.type,
-          ) && (
-            <button type="button" onClick={() => onOpen(artifact)}>
-              Open workspace
-              <FeatherIcon icon="arrow-up-right" size="14" />
-            </button>
-          )}
+        <span className="chat-artifact-actions">
+          {outputStatus && <small role="status">{outputStatus}</small>}
+          {onOpen &&
+            ["document", "spreadsheet", "presentation"].includes(
+              artifact.type,
+            ) && (
+              <button type="button" onClick={() => onOpen(artifact)}>
+                Open workspace
+                <FeatherIcon icon="arrow-up-right" size="14" />
+              </button>
+            )}
+          <button
+            type="button"
+            className="chat-artifact-icon-action"
+            aria-label={`Copy ${title}`}
+            title={`Copy ${title}`}
+            onClick={() => void copyOutput()}
+          >
+            <FeatherIcon icon="copy" size="14" />
+          </button>
+          <button
+            type="button"
+            className="chat-artifact-icon-action"
+            aria-label={`Download ${title}`}
+            title={`Download ${title}`}
+            onClick={() => void downloadOutput()}
+          >
+            <FeatherIcon icon="download" size="14" />
+          </button>
+        </span>
       </header>
       {artifact.description && <p>{artifact.description}</p>}
       {artifact.type === "metric" && (
@@ -264,6 +416,9 @@ function ArtifactPreview({
           ))}
         </div>
       )}
+      {isMiniWidgetType(artifact.type) && (
+        <MiniWidget payload={artifact as MiniWidgetPayload} />
+      )}
       {contentHtml && (
         <div
           className="chat-artifact-copy ai-formatted-copy"
@@ -313,8 +468,11 @@ export function AiMessageContent({ content, onOpenArtifact }: Props) {
         try {
           if (source.length > 200_000) return "";
           const value = JSON.parse(source) as ChatArtifactPayload;
-          if (
-            value &&
+          if (!value) return "";
+          if (isMiniWidgetType(value.type)) {
+            const widget = normalizeMiniWidget(value);
+            if (widget) artifacts.push(widget);
+          } else if (
             [
               "document",
               "spreadsheet",
@@ -323,8 +481,9 @@ export function AiMessageContent({ content, onOpenArtifact }: Props) {
               "chart",
               "metric",
             ].includes(value.type)
-          )
+          ) {
             artifacts.push(value);
+          }
         } catch {
           // Malformed widget data remains inert and is not rendered as HTML.
         }
@@ -379,6 +538,34 @@ export function AiMessageContent({ content, onOpenArtifact }: Props) {
       if (list?.tagName === "UL" || list?.tagName === "OL")
         list.classList.add("ai-source-list");
     }
+    for (const pre of document.querySelectorAll("pre")) {
+      const code = pre.querySelector("code");
+      if (!code) continue;
+      const language =
+        [...code.classList]
+          .find((name) => name.startsWith("language-"))
+          ?.slice("language-".length) || "code";
+      const wrapper = document.createElement("section");
+      wrapper.className = "ai-code-output";
+      wrapper.dataset.language = language;
+      const toolbar = document.createElement("header");
+      const label = document.createElement("span");
+      label.textContent = language === "code" ? "Code" : language;
+      toolbar.append(label);
+      for (const action of ["copy", "download"]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.chatOutputAction = action;
+        button.textContent = action === "copy" ? "Copy" : "Download";
+        button.setAttribute(
+          "aria-label",
+          `${action === "copy" ? "Copy" : "Download"} ${language} code`,
+        );
+        toolbar.append(button);
+      }
+      pre.replaceWith(wrapper);
+      wrapper.append(toolbar, pre);
+    }
     for (const link of document.querySelectorAll("a")) {
       const href = link.getAttribute("href") || "";
       if (!/^https?:\/\//i.test(href)) link.removeAttribute("href");
@@ -418,6 +605,30 @@ export function AiMessageContent({ content, onOpenArtifact }: Props) {
       <div
         className="ai-message-content"
         onClick={(event) => {
+          const actionButton = (event.target as HTMLElement).closest(
+            "[data-chat-output-action]",
+          ) as HTMLButtonElement | null;
+          if (actionButton) {
+            const output = actionButton.closest(".ai-code-output");
+            const code = output?.querySelector("code")?.textContent || "";
+            const language =
+              (output as HTMLElement | null)?.dataset.language || "code";
+            if (!code) return;
+            if (actionButton.dataset.chatOutputAction === "copy") {
+              void window.oscode.copyChatOutput(code).then(() => {
+                actionButton.textContent = "Copied";
+                window.setTimeout(() => {
+                  actionButton.textContent = "Copy";
+                }, 1800);
+              });
+            } else {
+              void window.oscode.downloadChatOutput(
+                `code-output.${codeExtension(language)}`,
+                code,
+              );
+            }
+            return;
+          }
           const link = (event.target as HTMLElement).closest("a");
           const href = link?.getAttribute("href") || "";
           if (!/^https:\/\//i.test(href)) return;

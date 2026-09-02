@@ -58,7 +58,7 @@ export class AppUpdateService {
 
   constructor(
     private readonly emit: (status: AppUpdateStatus) => void,
-    private readonly quitAfterInstallerLaunch: () => void,
+    private readonly handoffInstaller: (installerPath: string) => void,
   ) {}
 
   initialize(enabled: boolean) {
@@ -281,16 +281,21 @@ export class AppUpdateService {
     const version = this.status.version;
     const channel = this.status.channel;
     try {
-      const launchError = await shell.openPath(file);
-      if (launchError) throw new Error(launchError);
+      if (process.platform !== "darwin") {
+        const launchError = await shell.openPath(file);
+        if (launchError) throw new Error(launchError);
+      }
       this.update({
         state: "installing",
-        message: "Installer opened; osChat is closing",
+        message:
+          process.platform === "darwin"
+            ? "osChat is closing; the installer will open next"
+            : "Installer opened; osChat is closing",
         version,
         channel,
         percent: 100,
       });
-      const timeout = setTimeout(this.quitAfterInstallerLaunch, 150);
+      const timeout = setTimeout(() => this.handoffInstaller(file), 150);
       timeout.unref();
     } catch (error) {
       this.update({
@@ -300,6 +305,19 @@ export class AppUpdateService {
         channel,
       });
     }
+    return this.getStatus();
+  }
+
+  cancelInstallHandoff() {
+    if (this.status.state !== "installing" || !this.downloadedPackage)
+      return this.getStatus();
+    this.update({
+      state: "ready",
+      message: `osChat ${this.status.version || "update"} is downloaded and ready`,
+      version: this.status.version,
+      percent: 100,
+      channel: this.status.channel,
+    });
     return this.getStatus();
   }
 

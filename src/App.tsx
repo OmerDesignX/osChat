@@ -97,6 +97,7 @@ const workspaceIcons: Record<ProductivityArtifactKind, string> = {
   presentation: "monitor",
 };
 const newId = () => globalThis.crypto.randomUUID();
+const NOTICE_AUTO_DISMISS_MS = 10_000;
 const errorMessage = (error: unknown) =>
   error instanceof Error
     ? error.message.replace(
@@ -397,6 +398,14 @@ export function App() {
     const timer = window.setInterval(() => void refreshAgentState(), 1_500);
     return () => window.clearInterval(timer);
   }, [ready, refreshAgentState]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(
+      () => setNotice(""),
+      NOTICE_AUTO_DISMISS_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   useEffect(
     () => window.oscode.onAppUpdateStatus((status) => setUpdateStatus(status)),
     [],
@@ -1325,13 +1334,6 @@ export function App() {
             <section className="sidebar-list">
               <header>
                 <span>Recent chats</span>
-                <button
-                  type="button"
-                  aria-label="New chat"
-                  onClick={() => void newChat()}
-                >
-                  <FeatherIcon icon="plus" size="16" />
-                </button>
               </header>
               <div>
                 {filteredChats.map((chat) => {

@@ -9,6 +9,8 @@ const app = read("src/App.tsx");
 const styles = read("src/styles.css");
 const aiPanel = read("src/components/AiPanel.tsx");
 const aiMessage = read("src/components/AiMessageContent.tsx");
+const miniWidget = read("src/components/MiniWidget.tsx");
+const miniWidgetModel = read("src/lib/mini-widget.ts");
 const productivity = read("src/components/ProductivityWorkspaceV2.tsx");
 const main = read("electron/main/index.ts");
 const preload = read("electron/preload/index.cts");
@@ -66,6 +68,10 @@ test("osChat uses a chat-first shell with familiar left navigation", () => {
   assert.match(app, /className="new-chat-button"/);
   assert.match(app, /Search chats and workspaces/);
   assert.match(app, /Recent chats/);
+  assert.doesNotMatch(
+    app,
+    /<span>Recent chats<\/span>[\s\S]{0,220}aria-label="New chat"/,
+  );
   assert.match(app, />\s*Notes\s*</);
   assert.match(app, /notes-kind-nav/);
   assert.match(app, /OsChatWordmark/);
@@ -267,6 +273,27 @@ test("new chat refreshes and opens an empty conversation immediately", () => {
     aiPanel,
     /setMessages\(cleanMessages\);[\s\S]*?setInput\(""\);[\s\S]*?setAttachments\(\[\]\);/,
   );
+  assert.match(
+    read("electron/main/agent-state.ts"),
+    /const draft = this\.draftChats\.get\(projectKey\(projectRoot\)\);[\s\S]*?\? \[draft, \.\.\.persistedChats\]/,
+  );
+  assert.match(main, /new-chat renderer assertions failed/);
+  assert.match(main, /visibleDraft/);
+});
+
+test("chat footer controls auto-hide to dark icon circles and expand accessibly", () => {
+  assert.match(aiPanel, /className="ai-footer-label"/);
+  assert.match(styles, /--ai-footer-rest-fill:/);
+  assert.match(
+    styles,
+    /@media \(hover: hover\) and \(pointer: fine\) and \(min-width: 521px\)/,
+  );
+  assert.match(
+    styles,
+    /> \.ai-inline-goal:is\(:hover, :focus-within, :has\(\[aria-expanded="true"\]\)\)/,
+  );
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(main, /footer auto-hide assertions failed/);
 });
 
 test("new-chat creation is idempotent and widget protocols stay out of previews", () => {
@@ -386,7 +413,57 @@ test("chat can render inert interactive artifacts and opens editable workspaces"
   assert.match(aiMessage, /DOMPurify\.sanitize/);
   assert.match(aiMessage, /FORBID_TAGS/);
   assert.match(aiMessage, /window\.oscode\.openExternalUrl/);
+  assert.match(aiMessage, /copyChatOutput/);
+  assert.match(aiMessage, /downloadChatOutput/);
+  assert.match(aiMessage, /artifactOutput/);
+  assert.match(aiMessage, /<MiniWidget payload=/);
+  assert.match(aiMessage, /normalizeMiniWidget/);
+  assert.match(aiMessage, /csvCell/);
+  assert.match(aiMessage, /ai-code-output/);
+  assert.match(main, /chat-output:copy/);
+  assert.match(main, /chat-output:download/);
   assert.match(app, /onOpenArtifact/);
+});
+
+test("the agent can render safe interactive mini GUIs without executable code", () => {
+  for (const type of [
+    "checklist",
+    "quiz",
+    "poll",
+    "counter",
+    "timer",
+    "flashcards",
+    "calculator",
+  ]) {
+    assert.match(miniWidgetModel, new RegExp(`"${type}"`));
+  }
+  assert.match(miniWidget, /ChecklistWidget/);
+  assert.match(miniWidget, /QuizWidget/);
+  assert.match(miniWidget, /PollWidget/);
+  assert.match(miniWidget, /CounterWidget/);
+  assert.match(miniWidget, /TimerWidget/);
+  assert.match(miniWidget, /FlashcardWidget/);
+  assert.match(miniWidget, /CalculatorWidget/);
+  assert.match(miniWidgetModel, /evaluateWidgetExpression/);
+  assert.doesNotMatch(miniWidgetModel, /\beval\s*\(|new Function/);
+  assert.doesNotMatch(miniWidget, /dangerouslySetInnerHTML/);
+  assert.match(styles, /Safe declarative mini widgets/);
+  assert.match(styles, /\.timer-dial/);
+  assert.match(styles, /\.calculator-result/);
+});
+
+test("the last completed answer can be regenerated without duplicating earlier turns", () => {
+  assert.match(aiPanel, /const retryLastResponse = async/);
+  assert.match(aiPanel, /current\.slice\(0, userIndex\)/);
+  assert.match(aiPanel, /Retry response/);
+});
+
+test("transient notifications dismiss themselves after ten seconds", () => {
+  assert.match(app, /const NOTICE_AUTO_DISMISS_MS = 10_000/);
+  assert.match(
+    app,
+    /window\.setTimeout\([\s\S]*?setNotice\(""\)[\s\S]*?NOTICE_AUTO_DISMISS_MS/,
+  );
 });
 
 test("Qwen answers and document widgets use restrained semantic typography", () => {
@@ -415,6 +492,8 @@ test("the local agent prompt understands osChat artifacts and still acts through
   assert.match(ai, /INTERACTIVE CHAT/);
   assert.match(ai, /INTERACTIVE CHAT COMPLETION CONTRACT/);
   assert.match(ai, /every substantive answer MUST include exactly one/);
+  assert.match(ai, /MINI WIDGETS/);
+  assert.match(ai, /Never emit HTML, CSS, scripts, event handlers/);
   assert.match(ai, /Saving an \.oschat\.json file is internal persistence/);
   assert.match(ai, /Interactive-output correction/);
   assert.match(ai, /hasRenderableInteractiveContent/);

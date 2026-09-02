@@ -400,9 +400,16 @@ test("manual release build preserves the verified native package pipeline", () =
   assert.match(updater, /installReadyUpdate/);
   assert.match(updater, /downloadAvailable/);
   assert.match(updater, /ready-update\.json/);
-  assert.match(updater, /await shell\.openPath\(file\)/);
+  assert.match(
+    updater,
+    /process\.platform !== "darwin"[\s\S]{0,180}await shell\.openPath\(file\)/,
+  );
   assert.match(updater, /if \(launchError\) throw new Error\(launchError\)/);
-  assert.match(updater, /setTimeout\(this\.quitAfterInstallerLaunch, 150\)/);
+  assert.match(
+    updater,
+    /setTimeout\(\(\) => this\.handoffInstaller\(file\), 150\)/,
+  );
+  assert.match(updater, /cancelInstallHandoff\(\)/);
   assert.doesNotMatch(updater, /\bspawn\(/);
   assert.doesNotMatch(
     read("electron/main/index.ts"),
@@ -410,7 +417,15 @@ test("manual release build preserves the verified native package pipeline", () =
   );
   assert.match(
     read("electron/main/index.ts"),
-    /new AppUpdateService\([\s\S]{0,220}\(\) => app\.quit\(\)/,
+    /new AppUpdateService\([\s\S]{0,320}pendingMacInstallerPath = installerPath[\s\S]{0,100}app\.quit\(\)/,
+  );
+  assert.match(
+    read("electron/main/index.ts"),
+    /app\.on\("will-quit"[\s\S]{0,320}app\.relaunch\(\{ execPath: "\/usr\/bin\/open", args: \[installerPath\] \}\)/,
+  );
+  assert.match(
+    read("electron/main/index.ts"),
+    /if \(!discard\)[\s\S]{0,180}cancelInstallHandoff\(\)/,
   );
   assert.match(
     read("scripts/verify-package.mjs"),

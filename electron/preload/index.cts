@@ -36,6 +36,10 @@ contextBridge.exposeInMainWorld("oscode", {
   openExternalUrl: (url: string) =>
     ipcRenderer.invoke("app:open-external-url", url),
   websiteIcon: (url: string) => ipcRenderer.invoke("web:site-icon", url),
+  copyChatOutput: (content: string) =>
+    ipcRenderer.invoke("chat-output:copy", content),
+  downloadChatOutput: (name: string, content: string) =>
+    ipcRenderer.invoke("chat-output:download", name, content),
   listMcpServers: () => ipcRenderer.invoke("mcp:list-servers"),
   saveMcpServer: (server: unknown) =>
     ipcRenderer.invoke("mcp:save-server", server),

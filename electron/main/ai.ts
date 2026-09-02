@@ -1212,21 +1212,27 @@ export function normalizePublicAssistantIdentity(content?: string) {
 const interactiveChatBlock =
   /```oschat-(?:artifact|widget)\s*\n([\s\S]*?)```/gi;
 
+const renderableInteractiveTypes = new Set([
+  "document",
+  "spreadsheet",
+  "presentation",
+  "table",
+  "chart",
+  "metric",
+  "checklist",
+  "quiz",
+  "poll",
+  "counter",
+  "timer",
+  "flashcards",
+  "calculator",
+]);
+
 export function hasRenderableInteractiveContent(content: string) {
   for (const match of content.matchAll(interactiveChatBlock)) {
     try {
       const value = JSON.parse(match[1]) as { type?: unknown };
-      if (
-        value &&
-        [
-          "document",
-          "spreadsheet",
-          "presentation",
-          "table",
-          "chart",
-          "metric",
-        ].includes(String(value.type))
-      )
+      if (value && renderableInteractiveTypes.has(String(value.type)))
         return true;
     } catch {
       // A malformed protocol block is not renderable and must be corrected.
@@ -1252,14 +1258,14 @@ export function requiresInteractiveChatContent(message: string) {
     return false;
   return (
     text.length >= 16 ||
-    /\b(?:chart|compare|comparison|dashboard|document|graph|gui|interactive|list|matrix|metric|note|options|presentation|rank|report|schedule|show|slide|spreadsheet|table|timeline|visuali[sz]e|widget)\b/i.test(
+    /\b(?:calculator|chart|checklist|compare|comparison|counter|dashboard|document|flashcards?|graph|gui|interactive|list|matrix|metric|note|options|poll|presentation|quiz|rank|report|schedule|show|slide|spreadsheet|table|timer|timeline|visuali[sz]e|widget)\b/i.test(
       text,
     )
   );
 }
 
 function requiresStructuredInteractiveChatContent(message: string) {
-  return /\b(?:chart|compare|comparison|dashboard|document|graph|gui|interactive|matrix|metric|presentation|rank(?:ed|ing)?|report|schedule|show\s+(?:me\s+)?(?:the\s+)?(?:table|chart|document|spreadsheet|presentation|slides?|widget)|slides?|spreadsheet|table|timeline|visuali[sz]e|widget)\b/i.test(
+  return /\b(?:calculator|chart|checklist|compare|comparison|counter|dashboard|document|flashcards?|graph|gui|interactive|matrix|metric|poll|presentation|quiz|rank(?:ed|ing)?|report|schedule|show\s+(?:me\s+)?(?:the\s+)?(?:table|chart|document|spreadsheet|presentation|slides?|widget)|slides?|spreadsheet|table|timer|timeline|visuali[sz]e|widget)\b/i.test(
     message.replace(/\s+/g, " ").trim(),
   );
 }
@@ -4894,6 +4900,7 @@ export class LocalAiService {
       "EXECUTION CONTRACT FOR EVERY CREATION OR IMPLEMENTATION REQUEST: Step 1 inspect the osChat workspace with list_files and read_file. Step 2 call write_file with complete content for every required file; on later turns, read the existing file and write the improved version back to the same path instead of merely replying with replacement content. Use copy_file for an existing binary or text file that needs another workspace location. Use delete_path, never a terminal deletion command, when the user explicitly asks to remove an existing item; each deletion always receives a fresh one-time Move to Trash approval. Step 3 install Python dependencies with python_install_packages when needed; never install them through run_command. Use web_search for generic public discovery and web_download_image for every requested public image that must be saved locally; never put private workspace or attachment content into a query. Step 4 run the smallest relevant check when the deliverable is executable or structured. Step 5 only after the artifact or files are saved and any relevant verification succeeds, give a short final result. Until Step 5, the response must be the next tool call. Do not paste a requested implementation into chat instead of saving it.",
       "PRODUCTIVITY WORKSPACES: documents live in Documents, spreadsheets in Spreadsheets, and presentations in Presentations. A native editable artifact is one UTF-8 JSON file named <safe-id>.oschat.json. Use an identifier of 8-80 letters, digits, hyphens, or underscores. The record is {id,kind,title,createdAt,updatedAt,data}. Document data is {html,plainText,page:'letter'|'a4',zoom:number}. Spreadsheet data is {sheets:[{id,name,cells:string[][],styles:{}}],activeSheetId}; formulas begin with = and can use arithmetic or SUM, AVERAGE, MIN, and MAX ranges. Presentation data is {slides:[{id,title,body,notes,background,layout:'title'|'section'|'blank'}],activeSlideId,theme:'gunmetal'|'blue'|'light'}. Read the existing artifact before revising it and preserve its identifiers. Use ISO timestamps. A comparison or multi-row table belongs in a spreadsheet artifact, not a document containing a JSON description of a table. Saving an .oschat.json file is internal persistence and never counts as showing the result to the user. Never expose the internal .oschat.json filename or raw storage record in user-facing prose.",
       'INTERACTIVE CHAT COMPLETION CONTRACT: every substantive answer MUST include exactly one immediately renderable interactive view in addition to a concise prose summary. The fenced JSON is an internal UI protocol that osChat removes from prose and renders as a native card; do not describe it as JSON or ask the user to open a file. Use ```oschat-widget with valid JSON shaped as {"type":"table","title":"...","description":"...","headers":["..."],"rows":[["..."]]} for every comparison, schedule, timeline, option matrix, ranking, or multi-row result; use type chart with labels and numeric values for quantitative trends; use type metric with value and unit for one important value; or use type document with title and content for substantive prose that has no better structured view. Use ```oschat-artifact with type document, spreadsheet, or presentation plus title, description, content, and data matching the saved native artifact whenever a workspace artifact was created or revised. The payload must contain the actual result, not a path or a promise. A saved artifact and its rendered chat card must agree. Do not finish a table, document, spreadsheet, presentation, chart, GUI, dashboard, or widget request without its visible interactive block. Only a greeting, brief acknowledgement, permission wait, or concise clarification may omit it. Cite every public research answer with direct HTTPS source links in the prose summary.',
+      'MINI WIDGETS: when the user asks for a little GUI, interactive tool, practice activity, tracker, or control, choose the closest native declarative widget instead of writing HTML or JavaScript. Available shapes are: checklist {"type":"checklist","title":"Launch plan","items":[{"label":"Confirm date","checked":false}]}; quiz {"type":"quiz","title":"Quick quiz","questions":[{"question":"Which answer?","options":["A","B"],"answer":1,"explanation":"Why B is correct."}]}; poll {"type":"poll","title":"Team choice","question":"Which direction?","options":[{"label":"Option A","votes":0},{"label":"Option B","votes":0}]}; counter {"type":"counter","title":"Water tracker","value":0,"min":0,"max":8,"step":1}; timer {"type":"timer","title":"Focus sprint","durationSeconds":1500}; flashcards {"type":"flashcards","title":"Study cards","cards":[{"front":"Question","back":"Answer","hint":"Optional hint"}]}; calculator {"type":"calculator","title":"Tip calculator","fields":[{"id":"bill","label":"Bill","value":50,"min":0,"max":500,"step":1,"unit":"$"},{"id":"tip","label":"Tip","value":20,"min":0,"max":40,"step":1,"unit":"%"}],"formula":"bill * (1 + tip / 100)","resultLabel":"Total","resultUnit":"$","precision":2}. Calculator formulas may contain only field identifiers, numbers, parentheses, +, -, *, /, %, ^, and abs, ceil, floor, max, min, pow, round, or sqrt. These widgets are local session controls: use them for direct interaction, not durable multi-user data. Never emit HTML, CSS, scripts, event handlers, URLs, or executable code inside a widget. Keep labels concise and payloads focused.',
       "A tool result is new authoritative context. After each result, continue with the next distinct required tool. Do not repeat a successful call, do not merely narrate the next step, and do not claim completion before reading verification output. Keep visible reasoning before a tool concise (at most about 120 words) and emit the next tool call as soon as its arguments are known. Web discovery is limited to two searches per task; after that, choose a returned source URL and call web_fetch or web_download_image instead of refining the search again.",
       "If the project is empty, choose a conventional minimal structure from the user's request and create the necessary files directly. For PlatformIO, call platformio_boards and then platformio_initialize so the board ID and starter project are validated before editing. Do not ask which filename to use unless two materially different products are genuinely possible.",
       "GOLDEN UNCERTAINTY RULE: never silently stop, guess a material hardware/product choice, or give up because context is genuinely missing. If the available project state and tool results still leave two materially different safe actions, ask one concise, specific question in chat and explain exactly which choice is needed. Concrete tool or compiler errors are not ambiguity: inspect them, change the approach, and keep working.",
@@ -6080,6 +6087,19 @@ json.dump({'content':out},sys.stdout)`;
       result = "",
     ) => publishAction(finishToolAction(action, status, result));
     const projectRoot = await fs.realpath(this.root());
+    if (
+      request.messages.some(
+        (message) =>
+          message.role === "user" &&
+          (message.content.trim() || message.attachments?.length),
+      )
+    )
+      await this.agentState.saveChat(
+        request.chatId,
+        projectRoot,
+        request.messages,
+        request.contextSummary,
+      );
     if (!request.resumePermission)
       this.pendingPermissionCalls.delete(request.chatId);
     const agentState = await this.agentState.state(projectRoot);
@@ -6605,7 +6625,7 @@ json.dump({'content':out},sys.stdout)`;
         ) {
           correctedMissingInteractiveContent += 1;
           appendSystemCorrection(
-            "Interactive-output correction: this answer was rejected because it returned prose or an internal artifact path without a renderable osChat view. Return the actual result now with one valid fenced oschat-widget or oschat-artifact JSON block. Use a table with real headers and rows for comparisons or multi-row data; use a matching document, spreadsheet, or presentation payload with real content and data for a saved workspace artifact. Do not mention .oschat.json, do not merely say the result was saved, and do not ask the user to request the preview separately.",
+            "Interactive-output correction: this answer was rejected because it returned prose or an internal artifact path without a renderable osChat view. Return the actual result now with one valid fenced oschat-widget or oschat-artifact JSON block. Use a table with real headers and rows for comparisons or multi-row data; use checklist, quiz, poll, counter, timer, flashcards, or calculator for a requested mini GUI; use a matching document, spreadsheet, or presentation payload with real content and data for a saved workspace artifact. Do not mention .oschat.json, do not merely say the result was saved, and do not ask the user to request the preview separately.",
           );
           continue;
         }

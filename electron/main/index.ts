@@ -144,6 +144,7 @@ let runningDebug = false;
 let quittingAfterCleanup = false;
 let rendererHasUnsavedChanges = false;
 let closeConfirmationOpen = false;
+let pendingMacInstallerPath = "";
 let spellcheckEnabled = true;
 let aiDisposePromise: Promise<void> | null = null;
 function sendToRenderer(channel: string, ...args: unknown[]) {
@@ -2923,6 +2924,101 @@ async function runSmokeTest(window: BrowserWindow) {
     )
       throw new Error("chat-first renderer assertions failed");
 
+    const newChatResult = (await window.webContents.executeJavaScript(
+      `(async () => {
+        const notes = [...document.querySelectorAll(".workspace-nav > button")].find((button) => button.textContent?.trim().startsWith("Notes"));
+        notes?.click();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        document.querySelector(".new-chat-button")?.click();
+        const deadline = Date.now() + 8_000;
+        let state;
+        let chatView = false;
+        let composer = false;
+        let visibleDraft = false;
+        do {
+          state = await window.oscode.aiAgentState();
+          chatView = Boolean(document.querySelector(".oschat-main.chat-view"));
+          composer = Boolean(document.querySelector('.ai-composer textarea[aria-label="Message local AI"]'));
+          visibleDraft = state.chats.some((chat) => chat.title === "New chat" && chat.messages.length === 0);
+          if (chatView && composer && visibleDraft) break;
+          await new Promise((resolve) => setTimeout(resolve, 120));
+        } while (Date.now() < deadline);
+        return {
+          chatView,
+          composer,
+          visibleDraft,
+        };
+      })()`,
+      true,
+    )) as Record<string, unknown>;
+    if (
+      !newChatResult.chatView ||
+      !newChatResult.composer ||
+      !newChatResult.visibleDraft
+    )
+      throw new Error(
+        `new-chat renderer assertions failed: ${JSON.stringify(newChatResult)}`,
+      );
+
+    window.webContents.sendInputEvent({ type: "mouseMove", x: 2, y: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    const footerControlsResult = (await window.webContents.executeJavaScript(
+      `(async () => {
+        const controls = document.querySelector('.ai-composer-controls.workspace');
+        const model = controls?.querySelector(':scope > .ai-tier-toggle');
+        const permission = controls?.querySelector(':scope > .ai-capability-drawer > .ai-capability-toggle');
+        const goal = controls?.querySelector(':scope > .ai-inline-goal > button');
+        const composer = document.querySelector('.ai-composer textarea');
+        if (!controls || !model || !permission || !goal || !composer)
+          return { ready: false };
+        if (model.getAttribute('aria-expanded') === 'true') {
+          model.click();
+          await new Promise((resolve) => setTimeout(resolve, 220));
+        }
+        composer.focus();
+        await new Promise((resolve) => setTimeout(resolve, 220));
+        const resting = [model, permission, goal].map((button) => button.getBoundingClientRect().width);
+        model.focus();
+        await new Promise((resolve) => setTimeout(resolve, 220));
+        const modelExpanded = model.getBoundingClientRect().width;
+        permission.focus();
+        await new Promise((resolve) => setTimeout(resolve, 220));
+        const modelCollapsed = model.getBoundingClientRect().width;
+        const permissionExpanded = permission.getBoundingClientRect().width;
+        goal.focus();
+        await new Promise((resolve) => setTimeout(resolve, 220));
+        const permissionCollapsed = permission.getBoundingClientRect().width;
+        const goalExpanded = goal.getBoundingClientRect().width;
+        composer.focus();
+        return {
+          ready: true,
+          resting,
+          modelExpanded,
+          modelCollapsed,
+          permissionExpanded,
+          permissionCollapsed,
+          goalExpanded,
+        };
+      })()`,
+      true,
+    )) as Record<string, unknown>;
+    const restingFooterWidths = Array.isArray(footerControlsResult.resting)
+      ? (footerControlsResult.resting as number[])
+      : [];
+    if (
+      !footerControlsResult.ready ||
+      restingFooterWidths.length !== 3 ||
+      restingFooterWidths.some((width) => width > 56) ||
+      Number(footerControlsResult.modelExpanded) < 270 ||
+      Number(footerControlsResult.modelCollapsed) > 56 ||
+      Number(footerControlsResult.permissionExpanded) < 240 ||
+      Number(footerControlsResult.permissionCollapsed) > 56 ||
+      Number(footerControlsResult.goalExpanded) < 120
+    )
+      throw new Error(
+        `footer auto-hide assertions failed: ${JSON.stringify(footerControlsResult)}`,
+      );
+
     const artifactResult = (await window.webContents.executeJavaScript(
       `(async () => {
         const createdAt = new Date().toISOString();
@@ -2939,6 +3035,11 @@ async function runSmokeTest(window: BrowserWindow) {
         const read = await window.oscode.readArtifact(artifact.id);
         const listed = await window.oscode.listArtifacts("document");
         const chat = await window.oscode.createAiChat("Smoke chat");
+        await window.oscode.saveAiChat(
+          chat.id,
+          [{ id: "smoke-user", role: "user", content: "Smoke input" }],
+          "",
+        );
         const state = await window.oscode.aiAgentState();
         return {
           workspace: workspace.name,
@@ -2957,7 +3058,9 @@ async function runSmokeTest(window: BrowserWindow) {
       !artifactResult.listed ||
       !artifactResult.chat
     )
-      throw new Error("native workspace bridge assertions failed");
+      throw new Error(
+        `native workspace bridge assertions failed: ${JSON.stringify(artifactResult)}`,
+      );
 
     if (
       qaScreenshotPath &&
@@ -3184,6 +3287,32 @@ function registerIpc() {
       throw new Error("Invalid website address");
     return fetchPublicSiteIcon(rawUrl);
   });
+  ipcMain.handle("chat-output:copy", (_event, rawContent: unknown) => {
+    if (typeof rawContent !== "string" || rawContent.length > 2_000_000)
+      throw new Error("Invalid chat output");
+    clipboard.writeText(rawContent);
+    return true;
+  });
+  ipcMain.handle(
+    "chat-output:download",
+    async (_event, rawName: unknown, rawContent: unknown) => {
+      if (typeof rawContent !== "string" || rawContent.length > 2_000_000)
+        throw new Error("Invalid chat output");
+      const suggestedName =
+        (typeof rawName === "string" ? rawName.slice(0, 180) : "")
+          .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+          .replace(/^\.+/, "")
+          .trim() || "osChat-output.md";
+      const result = await dialog.showSaveDialog({
+        title: "Download output",
+        buttonLabel: "Download",
+        defaultPath: path.join(app.getPath("downloads"), suggestedName),
+      });
+      if (result.canceled || !result.filePath) return "";
+      await fs.writeFile(result.filePath, rawContent, "utf8");
+      return result.filePath;
+    },
+  );
   ipcMain.handle("mcp:list-servers", () => mcpClientService.listServers());
   ipcMain.handle("mcp:save-server", (_event, server: unknown) => {
     if (!server || typeof server !== "object")
@@ -5218,7 +5347,11 @@ if (ownsSingleInstance)
     }
     appUpdateService = new AppUpdateService(
       (status) => sendToRenderer("updates:status-changed", status),
-      () => app.quit(),
+      (installerPath) => {
+        if (process.platform === "darwin")
+          pendingMacInstallerPath = installerPath;
+        app.quit();
+      },
     );
     const developmentOrigin =
       !app.isPackaged && process.env.VITE_DEV_SERVER_URL
@@ -5369,7 +5502,6 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 app.on("before-quit", (event) => {
-  appUpdateService?.dispose();
   if (quittingAfterCleanup) {
     return;
   }
@@ -5382,7 +5514,11 @@ app.on("before-quit", (event) => {
       "Quitting osChat now will discard changes that have not been saved.",
     ).then(async (discard) => {
       closeConfirmationOpen = false;
-      if (!discard) return;
+      if (!discard) {
+        pendingMacInstallerPath = "";
+        appUpdateService?.cancelInstallHandoff();
+        return;
+      }
       rendererHasUnsavedChanges = false;
       for (const context of windowContexts.values()) context.allowClose = true;
       quittingAfterCleanup = true;
@@ -5406,6 +5542,13 @@ app.on("before-quit", (event) => {
   void stopProjectProcesses()
     .then(() => disposeAiServiceSafely())
     .finally(() => app.quit());
+});
+app.on("will-quit", () => {
+  appUpdateService?.dispose();
+  if (process.platform !== "darwin" || !pendingMacInstallerPath) return;
+  const installerPath = pendingMacInstallerPath;
+  pendingMacInstallerPath = "";
+  app.relaunch({ execPath: "/usr/bin/open", args: [installerPath] });
 });
 app.on("activate", () => {
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();

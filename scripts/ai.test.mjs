@@ -53,6 +53,29 @@ test("interactive chat completion recognizes only renderable artifact payloads",
     hasRenderableInteractiveContent("```oschat-widget\n{not valid json}\n```"),
     false,
   );
+  for (const type of [
+    "checklist",
+    "quiz",
+    "poll",
+    "counter",
+    "timer",
+    "flashcards",
+    "calculator",
+  ]) {
+    assert.equal(
+      hasRenderableInteractiveContent(
+        `\`\`\`oschat-widget\n${JSON.stringify({ type })}\n\`\`\``,
+      ),
+      true,
+      `${type} should be recognized as a native interactive view`,
+    );
+  }
+  assert.equal(
+    hasRenderableInteractiveContent(
+      '```oschat-widget\n{"type":"html","content":"<script>alert(1)</script>"}\n```',
+    ),
+    false,
+  );
   assert.equal(
     hasRenderableInteractiveContent(
       "| Car | Speed |\n| --- | --- |\n| A | 320 |",
@@ -485,6 +508,11 @@ async function fixture({
     ...serviceOptions,
   });
   const chat = await service.createChat();
+  await service.saveChat(
+    chat.id,
+    [{ role: "user", content: "Test conversation" }],
+    "",
+  );
   if (grants) {
     await service.grantPermission(
       "project.read",
