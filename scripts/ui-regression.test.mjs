@@ -18,6 +18,17 @@ const ai = read("electron/main/ai.ts");
 const chatCollectionActions = read("src/lib/chat-collection-actions.ts");
 const chatListPreview = read("src/lib/chat-list-preview.ts");
 
+test("MLX built-in models stay in the Small, Medium, and Large selector", () => {
+  assert.doesNotMatch(
+    aiPanel,
+    /function osCodeGgufTier[\s\S]{0,180}model\.engine !== "llamacpp"/,
+  );
+  assert.match(
+    aiPanel,
+    /\["bundled", "downloaded", "available"\]\.includes\(model\.source\)/,
+  );
+});
+
 test("AI work survives navigation, hidden windows, and renderer reattachment", () => {
   assert.doesNotMatch(
     main,

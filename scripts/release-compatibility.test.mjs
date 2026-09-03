@@ -421,8 +421,21 @@ test("manual release build preserves the verified native package pipeline", () =
   );
   assert.match(
     read("electron/main/index.ts"),
-    /app\.on\("will-quit"[\s\S]{0,320}app\.relaunch\(\{ execPath: "\/usr\/bin\/open", args: \[installerPath\] \}\)/,
+    /app\.on\("will-quit"[\s\S]{0,320}openMacInstallerAfterExit\(installerPath\)/,
   );
+  assert.match(
+    read("electron/main/index.ts"),
+    /const macInstallerHandoffScript[\s\S]{0,800}\/bin\/kill -0[\s\S]{0,800}\/bin\/sleep 2[\s\S]{0,800}\/usr\/bin\/open/,
+  );
+  assert.match(
+    read("electron/main/index.ts"),
+    /spawn\([\s\S]{0,450}detached: true[\s\S]{0,120}handoff\.unref\(\)/,
+  );
+  assert.match(
+    read("electron/main/index.ts"),
+    /async function finishQuitCleanup\(\)[\s\S]{0,280}await stopProjectProcesses\(\)[\s\S]{0,280}await disposeAiServiceSafely\(\)/,
+  );
+  assert.doesNotMatch(read("electron/main/index.ts"), /app\.relaunch\(/);
   assert.match(
     read("electron/main/index.ts"),
     /if \(!discard\)[\s\S]{0,180}cancelInstallHandoff\(\)/,

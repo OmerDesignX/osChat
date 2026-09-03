@@ -149,6 +149,35 @@ let closeConfirmationOpen = false;
 let pendingMacInstallerPath = "";
 let spellcheckEnabled = true;
 let aiDisposePromise: Promise<void> | null = null;
+
+const macInstallerHandoffScript = [
+  'parent_pid="$1"',
+  'installer_path="$2"',
+  "attempt=0",
+  'while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$attempt" -lt 240 ]; do',
+  "  /bin/sleep 0.25",
+  "  attempt=$((attempt + 1))",
+  "done",
+  // Finder can briefly retain the bundle after Electron exits on Intel Macs.
+  "/bin/sleep 2",
+  'exec /usr/bin/open "$installer_path"',
+].join("\n");
+
+function openMacInstallerAfterExit(installerPath: string) {
+  const handoff = spawn(
+    "/bin/sh",
+    [
+      "-c",
+      macInstallerHandoffScript,
+      "oschat-update-handoff",
+      String(process.pid),
+      installerPath,
+    ],
+    { cwd: "/", detached: true, stdio: "ignore" },
+  );
+  handoff.once("error", () => undefined);
+  handoff.unref();
+}
 function sendToRenderer(channel: string, ...args: unknown[]) {
   if (
     !mainWindow ||
@@ -606,6 +635,15 @@ function disposeAiServiceSafely() {
     .then(() => aiService?.dispose())
     .catch(() => undefined);
   return aiDisposePromise;
+}
+
+async function finishQuitCleanup() {
+  try {
+    await stopProjectProcesses();
+  } catch {
+    // Continue quitting even if a child process already disappeared.
+  }
+  await disposeAiServiceSafely();
 }
 
 async function disposeTerminal(id: string) {
@@ -2967,7 +3005,12 @@ async function runSmokeTest(window: BrowserWindow) {
         `new-chat renderer assertions failed: ${JSON.stringify(newChatResult)}`,
       );
 
-    window.webContents.sendInputEvent({ type: "mouseMove", x: 2, y: 2 });
+    const contentBounds = window.getContentBounds();
+    window.webContents.sendInputEvent({
+      type: "mouseMove",
+      x: Math.max(24, Math.floor(contentBounds.width / 2)),
+      y: 32,
+    });
     await new Promise((resolve) => setTimeout(resolve, 220));
     const footerControlsResult = (await window.webContents.executeJavaScript(
       `(async () => {
@@ -2982,21 +3025,30 @@ async function runSmokeTest(window: BrowserWindow) {
           model.click();
           await new Promise((resolve) => setTimeout(resolve, 220));
         }
+        // Rosetta can retain the host pointer's previous :hover target even
+        // after sendInputEvent moves it. Ignore pointer targeting while this
+        // probe exercises the same controls through their keyboard focus path.
+        model.style.pointerEvents = 'none';
         composer.focus();
         await new Promise((resolve) => setTimeout(resolve, 220));
         const resting = [model, permission, goal].map((button) => button.getBoundingClientRect().width);
         model.focus();
         await new Promise((resolve) => setTimeout(resolve, 220));
         const modelExpanded = model.getBoundingClientRect().width;
-        permission.focus();
+        composer.focus();
         await new Promise((resolve) => setTimeout(resolve, 220));
         const modelCollapsed = model.getBoundingClientRect().width;
+        permission.focus();
+        await new Promise((resolve) => setTimeout(resolve, 220));
         const permissionExpanded = permission.getBoundingClientRect().width;
-        goal.focus();
+        composer.focus();
         await new Promise((resolve) => setTimeout(resolve, 220));
         const permissionCollapsed = permission.getBoundingClientRect().width;
+        goal.focus();
+        await new Promise((resolve) => setTimeout(resolve, 220));
         const goalExpanded = goal.getBoundingClientRect().width;
         composer.focus();
+        model.style.removeProperty('pointer-events');
         return {
           ready: true,
           resting,
@@ -5392,6 +5444,9 @@ if (ownsSingleInstance)
     aiService = new LocalAiService({
       userData: app.getPath("userData"),
       modelsRoot: path.join(app.getPath("userData"), "models"),
+      sharedModelsRoots: [
+        path.join(path.dirname(app.getPath("userData")), "oscode", "models"),
+      ],
       secureStore,
       llamaRoot: app.isPackaged
         ? path.join(process.resourcesPath, "llama")
@@ -5533,33 +5588,21 @@ app.on("before-quit", (event) => {
       rendererHasUnsavedChanges = false;
       for (const context of windowContexts.values()) context.allowClose = true;
       quittingAfterCleanup = true;
-      await stopProjectProcesses();
-      await disposeAiServiceSafely();
+      await finishQuitCleanup();
       app.quit();
     });
     return;
   }
-  if (
-    !runningScript &&
-    terminals.size === 0 &&
-    !agentControlService?.isActive()
-  ) {
-    quittingAfterCleanup = true;
-    void disposeAiServiceSafely();
-    return;
-  }
   event.preventDefault();
   quittingAfterCleanup = true;
-  void stopProjectProcesses()
-    .then(() => disposeAiServiceSafely())
-    .finally(() => app.quit());
+  void finishQuitCleanup().finally(() => app.quit());
 });
 app.on("will-quit", () => {
   appUpdateService?.dispose();
   if (process.platform !== "darwin" || !pendingMacInstallerPath) return;
   const installerPath = pendingMacInstallerPath;
   pendingMacInstallerPath = "";
-  app.relaunch({ execPath: "/usr/bin/open", args: [installerPath] });
+  openMacInstallerAfterExit(installerPath);
 });
 app.on("activate", () => {
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();

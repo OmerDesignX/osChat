@@ -160,19 +160,40 @@ async function findMlx(
   return modelRoot;
 }
 
-export async function bundledModels(modelsRoot: string): Promise<AiModel[]> {
+export async function bundledModels(
+  modelsRoot: string,
+  sharedModelsRoots: string[] = [],
+): Promise<AiModel[]> {
   const engine = localAiEngine();
   const memoryBytes = os.totalmem();
   const results: AiModel[] = [];
+  const ownRoot = path.resolve(modelsRoot);
+  const roots = [
+    modelsRoot,
+    ...sharedModelsRoots.filter((root) => {
+      const resolved = path.resolve(root);
+      return process.platform === "win32"
+        ? resolved.toLowerCase() !== ownRoot.toLowerCase()
+        : resolved !== ownRoot;
+    }),
+  ];
   for (const tier of tiers) {
     const catalog = modelVariants.find(
       (item) => item.runtime === engine && item.tier === tier,
     );
     if (!catalog) continue;
-    const installedPath =
-      engine === "llamacpp"
-        ? await findGguf(path.join(modelsRoot, "gguf"), tier)
-        : await findMlx(path.join(modelsRoot, "mlx"), catalog);
+    let installedPath = "";
+    let installedFromOwnRoot = false;
+    for (const [index, root] of roots.entries()) {
+      installedPath =
+        engine === "llamacpp"
+          ? await findGguf(path.join(root, "gguf"), tier)
+          : await findMlx(path.join(root, "mlx"), catalog);
+      if (installedPath) {
+        installedFromOwnRoot = index === 0;
+        break;
+      }
+    }
     const bytes = installedPath
       ? engine === "llamacpp"
         ? await directoryBytes(path.dirname(installedPath))
@@ -185,7 +206,11 @@ export async function bundledModels(modelsRoot: string): Promise<AiModel[]> {
       name: `osChat ${tier[0].toUpperCase()}${tier.slice(1)}`,
       engine,
       path: installedPath || `catalog:${engine}:${tier}`,
-      source: installed ? "downloaded" : "available",
+      source: installed
+        ? installedFromOwnRoot
+          ? "downloaded"
+          : "bundled"
+        : "available",
       tier,
       bytes: installed ? bytes : undefined,
       downloadBytes: catalog.bytes,

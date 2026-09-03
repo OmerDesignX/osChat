@@ -364,7 +364,6 @@ function inferredTier(model: AiModel) {
 }
 
 function osCodeGgufTier(model: AiModel): Exclude<AiModelTier, "custom"> | null {
-  if (model.engine !== "llamacpp") return null;
   if (
     ["bundled", "downloaded", "available"].includes(model.source) &&
     model.tier &&

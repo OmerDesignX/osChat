@@ -298,6 +298,7 @@ type PendingEdit = { id: string; root: string; path: string; content: string };
 type ServiceOptions = {
   userData: string;
   modelsRoot: string;
+  sharedModelsRoots?: string[];
   secureStore?: SecureDataStore;
   llamaRoot?: string;
   getProjectRoot: () => string;
@@ -419,10 +420,10 @@ export function shouldCreateAutomaticGoal(message: string) {
 export function requiresProjectMutation(message: string) {
   const text = message.replace(/\s+/g, " ").trim();
   return (
-    /\b(?:build|create|design|develop|edit|fix|generate|implement|make|refactor|repair|update|write)\b[\s\S]{0,160}\b(?:algorithm|api|app|application|backend|class|cli|code|component|configuration|dashboard|feature|file|firmware|frontend|function|game|interface|layout|module|page|plugin|program|project|script|service|site|software|test|tool|ui|utility|webapp|website)\b/i.test(
+    /\b(?:build|create|design|develop|edit|fix|generate|implement|make|refactor|repair|update|write)\b[\s\S]{0,160}\b(?:algorithm|api|app|application|backend|behavior|bug|button|class|cli|code|component|configuration|control|dashboard|dialog|feature|file|firmware|frontend|function|game|interface|layout|menu|modal|module|page|panel|plugin|program|project|route|screen|script|service|site|software|style|stylesheet|test|toolbar|tool|ui|utility|view|webapp|website)\b/i.test(
       text,
     ) ||
-    /\b(?:add|change|remove|rename|replace|set)\b[\s\S]{0,100}\b(?:code|component|file|feature|function|module|project|source|test|ui)\b/i.test(
+    /\b(?:add|change|remove|rename|replace|set)\b[\s\S]{0,100}\b(?:behavior|bug|button|code|component|control|dialog|file|feature|function|layout|menu|modal|module|page|panel|project|route|screen|source|style|stylesheet|test|toolbar|ui|view)\b/i.test(
       text,
     ) ||
     /\b(?:build|create|edit|fix|generate|implement|make|update|write)\b[\s\S]{0,120}(?:^|\s)[\w./\\-]+\.(?:c|cc|cpp|cs|go|html?|java|js|jsx|json|md|py|rs|swift|ts|tsx|vue)\b/i.test(
@@ -2496,7 +2497,10 @@ export class LocalAiService {
   }
   async listModels() {
     const models = [
-      ...(await bundledModels(this.options.modelsRoot)),
+      ...(await bundledModels(
+        this.options.modelsRoot,
+        this.options.sharedModelsRoots,
+      )),
       ...(await this.registry()),
     ];
     for (const model of models)
@@ -6321,6 +6325,9 @@ json.dump({'content':out},sys.stdout)`;
     let forcePlatformioBuild = false;
     let wroteProjectFile = false;
     let verifiedProjectWork = false;
+    let stalledProjectSteps = 0;
+    let progressGuardMessage = "";
+    let forcedAgentPhase: "write" | "verify" | "finish" | null = null;
     const interactiveContentRequired =
       requiresInteractiveChatContent(workRequest);
     const structuredInteractiveContentRequired =
@@ -6528,6 +6535,7 @@ json.dump({'content':out},sys.stdout)`;
       let blockedInternalSearchThisStep = false;
       let blockedRepeatedFailureThisStep = false;
       let blockedUnchangedWriteThisStep = false;
+      let madeProjectProgressThisStep = false;
       this.options.status(
         step === 0 ? "Thinking locally…" : "Thinking about the next step…",
       );
@@ -6560,10 +6568,28 @@ json.dump({'content':out},sys.stdout)`;
           raw: { role: "assistant", content: markup },
         };
       } else {
+        const phaseTools = forcedAgentPhase
+          ? tools.filter((tool) => {
+              const name = String(
+                (tool.function as { name?: unknown } | undefined)?.name || "",
+              );
+              if (forcedAgentPhase === "finish") return false;
+              if (forcedAgentPhase === "write")
+                return ["write_file", "copy_file", "delete_path"].includes(
+                  name,
+                );
+              return [
+                "run_command",
+                "run_debug",
+                "platformio_run",
+                "python_install_packages",
+              ].includes(name);
+            })
+          : tools;
         reply = await this.remoteReply(
           request,
           messages,
-          tools,
+          phaseTools,
           request.thinkingEnabled && step === 0 && !continued,
         );
       }
@@ -6878,6 +6904,8 @@ json.dump({'content':out},sys.stdout)`;
                 (call.name === "python_install_packages" &&
                   !/"alreadyInstalled"\s*:\s*true/i.test(result)));
             if (changedProjectState) projectStateEpoch += 1;
+            if (changedProjectState) madeProjectProgressThisStep = true;
+            if (verifiedProjectWork) forcedAgentPhase = "finish";
             toolSteps.push(
               call.name === "write_file"
                 ? `${request.editMode === "ask" ? "Proposed" : "Edited"} ${String(call.arguments.path || "file")}`
@@ -6967,6 +6995,28 @@ json.dump({'content':out},sys.stdout)`;
         );
       }
       if (
+        implementationRequest &&
+        !verifiedProjectWork &&
+        !madeProjectProgressThisStep
+      ) {
+        stalledProjectSteps += 1;
+        if (stalledProjectSteps === 4) {
+          forcedAgentPhase = wroteProjectFile ? "verify" : "write";
+          appendSystemCorrection(
+            wroteProjectFile
+              ? "Progress correction: inspection is complete and project files were changed. The next action must verify the implementation with run_command, run_debug, or platformio_run; do not inspect more unchanged files."
+              : "Progress correction: the inspection budget is exhausted. The next action must change a real workspace file with write_file; do not list, search, or reread unchanged files.",
+          );
+        } else if (stalledProjectSteps >= 7) {
+          progressGuardMessage = wroteProjectFile
+            ? "I saved workspace changes, but stopped the agent because it did not move from inspection to a valid verification command. The files remain available for review."
+            : "I stopped the agent after repeated inspection without a valid file edit. No workspace files were changed, so the same reads will not loop indefinitely.";
+        }
+      } else if (madeProjectProgressThisStep) {
+        stalledProjectSteps = 0;
+        if (!verifiedProjectWork) forcedAgentPhase = null;
+      }
+      if (
         blockedUnchangedWriteThisStep &&
         platformioVerificationRequested &&
         !toolCallCounts.get("platformio_run")
@@ -6993,10 +7043,12 @@ json.dump({'content':out},sys.stdout)`;
           },
         };
       }
+      if (progressGuardMessage) break;
     }
     this.options.status("Ready · local only");
     return {
       content:
+        progressGuardMessage ||
         "I reached the guarded local tool-step limit after 24 steps. Review the work log, then ask me to continue the active goal.",
       retainedMessages,
       changedFiles: [...changed],

@@ -456,6 +456,10 @@ import {
   filesForVariant,
   modelVariants,
 } from "../dist-electron/main/model-catalog.js";
+import {
+  bundledModels,
+  localAiEngine,
+} from "../dist-electron/main/bundled-models.js";
 
 test("Ollama setup selects standalone CLI archives and rejects desktop installers", () => {
   assert.equal(ollamaCliAssetName("win32", "x64"), "ollama-windows-amd64.zip");
@@ -2970,6 +2974,10 @@ test("code-only implementation replies are discarded and replaced by real file a
     ),
     true,
   );
+  assert.equal(
+    requiresProjectMutation("Fix the button padding and menu hover style"),
+    true,
+  );
   let turn = 0;
   service.remoteReply = async (_request, messages) => {
     turn += 1;
@@ -3049,6 +3057,87 @@ test("code-only implementation replies are discarded and replaced by real file a
   assert.match(
     await fs.readFile(path.join(root, "generated.mjs"), "utf8"),
     /saved and verified/,
+  );
+});
+
+test("coding work cannot loop in inspection after the project is understood", async (t) => {
+  const { root, base, service, chat } = await fixture();
+  t.after(async () => {
+    await service.dispose();
+    await fs.rm(base, { recursive: true, force: true });
+  });
+  await service.grantPermission(
+    "terminal.run",
+    "always",
+    chat.id,
+    "node --version",
+  );
+  let turn = 0;
+  service.remoteReply = async (_request, _messages, tools) => {
+    turn += 1;
+    if (turn <= 4)
+      return {
+        content: "",
+        toolCalls: [
+          { id: `inspect-${turn}`, name: "list_files", arguments: {} },
+        ],
+      };
+    const names = tools.map((tool) => String(tool.function?.name || ""));
+    if (turn === 5) {
+      assert.deepEqual(names.sort(), [
+        "copy_file",
+        "delete_path",
+        "write_file",
+      ]);
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "write-after-inspection",
+            name: "write_file",
+            arguments: {
+              path: "src/index.ts",
+              content: "export const value = 2;\n",
+            },
+          },
+        ],
+      };
+    }
+    if (turn === 6)
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "verify-after-write",
+            name: "run_command",
+            arguments: { command: "node", args: ["--version"] },
+          },
+        ],
+      };
+    assert.equal(names.length, 0);
+    return { content: "Updated and verified the workspace.", toolCalls: [] };
+  };
+  const result = await service.chat({
+    chatId: chat.id,
+    engine: "mlx",
+    model: "fixture-mlx",
+    executable: "",
+    editMode: "auto",
+    terminalMode: "auto",
+    contextLimit: 8192,
+    contextSummary: "",
+    goal: "",
+    fileAccess: true,
+    webAccess: false,
+    browserAccess: false,
+    computerAccess: false,
+    messages: [{ role: "user", content: "Fix the code in the project." }],
+  });
+  assert.equal(turn, 7);
+  assert.match(result.content, /Updated and verified/);
+  assert.equal(
+    await fs.readFile(path.join(root, "src", "index.ts"), "utf8"),
+    "export const value = 2;\n",
   );
 });
 
@@ -3411,6 +3500,59 @@ test("downloaded osCode tiers can be deleted without touching custom models", as
       .catch(() => false),
     false,
   );
+});
+
+test("shared app models remain built-in tiers and cannot be deleted by this app", async (t) => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), "oschat-shared-model-"));
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const root = path.join(base, "project");
+  const ownModelsRoot = path.join(base, "oschat", "models");
+  const sharedModelsRoot = path.join(base, "oscode", "models");
+  await fs.mkdir(root, { recursive: true });
+  const runtime = localAiEngine();
+  const variant = modelVariants.find(
+    (item) => item.tier === "small" && item.runtime === runtime,
+  );
+  assert.ok(variant);
+  const tierRoot =
+    runtime === "mlx"
+      ? path.join(sharedModelsRoot, "mlx", variant.folder)
+      : path.join(sharedModelsRoot, "gguf", "small");
+  await fs.mkdir(tierRoot, { recursive: true });
+  const files = filesForVariant(variant);
+  const shards = files
+    .map((file) => path.basename(file))
+    .filter((file) => file.endsWith(".safetensors"));
+  for (const file of files) {
+    const name = path.basename(file);
+    await fs.writeFile(
+      path.join(tierRoot, name),
+      name === "model.safetensors.index.json"
+        ? JSON.stringify({
+            weight_map: Object.fromEntries(
+              shards.map((shard, index) => [`weight.${index}`, shard]),
+            ),
+          })
+        : "test model",
+    );
+  }
+  const service = new LocalAiService({
+    userData: path.join(base, "oschat"),
+    modelsRoot: ownModelsRoot,
+    sharedModelsRoots: [sharedModelsRoot],
+    getProjectRoot: () => root,
+    getPython: async () => "python",
+    getUv: async () => "uv",
+    status: () => undefined,
+  });
+  const shared = (await service.listModels()).find(
+    (item) => item.tier === "small" && item.installed,
+  );
+  assert.ok(shared);
+  assert.equal(shared.source, "bundled");
+  assert.ok(shared.path.startsWith(sharedModelsRoot));
+  await service.removeModel(shared.id);
+  assert.equal((await fs.stat(tierRoot)).isDirectory(), true);
 });
 
 test("saved chats preserve reasoning, model identity, images, and prior turns", async (t) => {
