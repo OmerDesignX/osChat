@@ -17357,3 +17357,76 @@ button > svg * {
   background: color-mix(in srgb, var(--accent) 18%, var(--panel2));
   color: var(--accent);
 }
+
+/* Keep the live transport controls fixed inside the composer. */
+.ai-composer:has(.ai-composer-stop-button),
+.ai-panel.workspace-mode .ai-composer:has(.ai-composer-stop-button) {
+  grid-template-columns: 48px minmax(0, 1fr) 48px 48px 1px 48px;
+}
+
+.ai-composer-stop-divider {
+  width: 1px;
+  height: 32px;
+  align-self: center;
+  justify-self: center;
+  background: var(--line);
+}
+
+.oschat-main.chat-view .ai-composer > .ai-composer-stop-button,
+.ai-composer > .ai-composer-stop-button {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel2) 88%, var(--chat-bg));
+  color: var(--text);
+  box-shadow: none;
+}
+
+.oschat-main.chat-view
+  .ai-composer
+  > .ai-composer-stop-button:hover:not(:disabled),
+.ai-composer > .ai-composer-stop-button:hover:not(:disabled),
+.ai-composer > .ai-composer-stop-button:focus-visible {
+  background: color-mix(in srgb, var(--panel2) 78%, var(--accent) 15%);
+  color: var(--accent);
+}
+
+.ai-action-output {
+  margin-top: 9px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel2) 88%, var(--chat-bg));
+}
+
+.ai-action-output summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  color: var(--muted);
+  font:
+    650 11px/1.25 Manrope,
+    sans-serif;
+}
+
+.ai-action-output pre {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  padding: 0 10px 10px;
+  color: var(--text);
+  font:
+    11px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

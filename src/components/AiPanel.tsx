@@ -908,9 +908,17 @@ export function AiPanel({
         if (output.chatId !== chatIdRef.current) return;
         setLiveModelOutput((current) => {
           const base =
-            output.reset || current.chatId !== output.chatId
+            current.chatId !== output.chatId
               ? { chatId: output.chatId, reasoning: "", answer: "" }
-              : current;
+              : output.reset
+                ? {
+                    chatId: output.chatId,
+                    reasoning: current.reasoning.trim()
+                      ? `${current.reasoning.trim()}\n\n---\n\n`
+                      : "",
+                    answer: "",
+                  }
+                : current;
           if (!output.delta) return base;
           return output.phase === "reasoning"
             ? {
@@ -2470,6 +2478,27 @@ export function AiPanel({
     </div>
   );
 
+  const liveContextUsed = Math.min(
+    usage.limit,
+    Math.max(
+      usage.used,
+      Math.ceil(
+        JSON.stringify({
+          messages,
+          contextSummary,
+          live:
+            liveModelOutput.chatId === chatId
+              ? {
+                  reasoning: liveModelOutput.reasoning,
+                  answer: liveModelOutput.answer,
+                  actions: liveActions,
+                }
+              : undefined,
+        }).length / 4,
+      ),
+    ),
+  );
+
   return (
     <aside
       className={`ai-panel${expanded ? " expanded" : ""}${workspaceMode ? " workspace-mode" : ""}`}
@@ -3757,7 +3786,10 @@ export function AiPanel({
               </details>
             )}
             {!!message.actions?.length && (
-              <details className="ai-response-actions">
+              <details
+                className="ai-response-actions"
+                open={messageIndex === messages.length - 1}
+              >
                 <summary>
                   <span>
                     <FeatherIcon icon="activity" size="14" />
@@ -3922,16 +3954,8 @@ export function AiPanel({
               </span>
             </div>
             {!!liveActions.length && (
-              <ActionTimeline actions={liveActions.slice(-4)} compact />
+              <ActionTimeline actions={liveActions} compact />
             )}
-            <button
-              type="button"
-              className="ai-stop-button"
-              onClick={stopResponse}
-            >
-              <FeatherIcon icon="square" size="13" />
-              Stop
-            </button>
           </div>
         )}
         <div ref={endRef} />
@@ -4504,6 +4528,7 @@ export function AiPanel({
         )}
         <button
           type="submit"
+          className="ai-send-button"
           disabled={
             (!input.trim() && !attachments.length) || !model || !projectName
           }
@@ -4522,21 +4547,35 @@ export function AiPanel({
             size="17"
           />
         </button>
+        {busy && (
+          <>
+            <span className="ai-composer-stop-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className="ai-composer-stop-button"
+              aria-label="Stop response"
+              title="Stop response"
+              onClick={stopResponse}
+            >
+              <FeatherIcon icon="square" size="15" />
+            </button>
+          </>
+        )}
       </form>
       <div
-        className={`ai-context ${usage.used / usage.limit > 0.9 ? "critical" : usage.used / usage.limit > 0.72 ? "near" : ""}`}
+        className={`ai-context ${liveContextUsed / usage.limit > 0.9 ? "critical" : liveContextUsed / usage.limit > 0.72 ? "near" : ""}`}
         title="Older chat is summarized locally before this fills"
       >
         <div>
           <span
             style={{
-              width: `${Math.min(100, (usage.used / usage.limit) * 100)}%`,
+              width: `${Math.min(100, (liveContextUsed / usage.limit) * 100)}%`,
             }}
           />
         </div>
         <small>
-          Context {Math.ceil(usage.used / 100) / 10}k / {usage.limit / 1000}k
-          tokens
+          Context {Math.ceil(liveContextUsed / 100) / 10}k /{" "}
+          {usage.limit / 1000}k tokens
           {selectedModel?.contextLimit &&
           selectedModel.contextLimit > usage.limit
             ? ` · ${selectedModel.contextLimit / 1000}k supported`
@@ -4592,6 +4631,15 @@ function ActionTimeline({
             </header>
             <b>{action.title}</b>
             {action.detail && <p>{action.detail}</p>}
+            {action.output && (
+              <details
+                className="ai-action-output"
+                open={action.status === "failed"}
+              >
+                <summary>Output</summary>
+                <pre>{action.output}</pre>
+              </details>
+            )}
             {!!action.websites?.length && (
               <div className="ai-action-sites" aria-label="Websites used">
                 {action.websites.map((website) => (

@@ -162,6 +162,7 @@ export type AiActionEntry = {
   status: AiActionStatus;
   title: string;
   detail?: string;
+  output?: string;
   tool?: string;
   query?: string;
   url?: string;

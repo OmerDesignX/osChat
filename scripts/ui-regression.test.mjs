@@ -51,6 +51,22 @@ test("AI work survives navigation, hidden windows, and renderer reattachment", (
   assert.match(app, /\{sharedAi\}/);
 });
 
+test("live context, reasoning, work output, and Stop stay visible", () => {
+  assert.match(aiPanel, /const liveContextUsed = Math\.min/);
+  assert.match(aiPanel, /reasoning: current\.reasoning\.trim\(\)/);
+  assert.match(aiPanel, /<ActionTimeline actions=\{liveActions\} compact \/>/);
+  assert.match(aiPanel, /className="ai-composer-stop-divider"/);
+  assert.match(aiPanel, /className="ai-composer-stop-button"/);
+  assert.match(aiPanel, /className="ai-action-output"/);
+  assert.match(aiPanel, /open=\{messageIndex === messages\.length - 1\}/);
+  assert.match(ai, /const thinkingTranscript = \(\) =>/);
+  assert.match(ai, /output: publicToolOutput\(action\.tool, result, status\)/);
+  assert.match(
+    styles,
+    /Keep the live transport controls fixed inside the composer/,
+  );
+});
+
 test("Intel CPU retry details never appear in public status text", () => {
   assert.doesNotMatch(ai, /Intel GPU startup failed/);
   assert.match(

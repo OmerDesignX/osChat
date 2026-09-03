@@ -142,6 +142,7 @@ function actions(value: unknown): AiActionEntry[] {
         status: input.status as AiActionEntry["status"],
         title,
         detail: text(input.detail, 1000) || undefined,
+        output: text(input.output, 6000) || undefined,
         tool: text(input.tool, 100) || undefined,
         query: text(input.query, 500) || undefined,
         url: text(input.url, 2000) || undefined,

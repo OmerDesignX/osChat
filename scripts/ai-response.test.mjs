@@ -243,6 +243,25 @@ test("agent action records retain public sources without recording typed text", 
   );
   assert.equal(page.url, "https://example.com/docs");
   assert.doesNotMatch(JSON.stringify(page), /secret|private|person/);
+
+  const fileRead = actionForTool(
+    { name: "read_file", arguments: { path: "src/private.ts" } },
+    "chat-1",
+  );
+  const finishedRead = finishToolAction(fileRead, "completed", secret);
+  assert.equal(finishedRead.output, undefined);
+  assert.doesNotMatch(JSON.stringify(finishedRead), new RegExp(secret));
+
+  const command = actionForTool(
+    { name: "run_command", arguments: { command: "npm", args: ["test"] } },
+    "chat-1",
+  );
+  const finishedCommand = finishToolAction(
+    command,
+    "completed",
+    JSON.stringify({ stdout: "Tests passed", stderr: "", exitCode: 0 }),
+  );
+  assert.equal(finishedCommand.output, "Tests passed");
 });
 
 test("malformed command actions remain visible so the model can repair them", () => {
