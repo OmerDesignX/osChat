@@ -9,7 +9,9 @@ import {
   parseQwenContent,
   qwenToolCallMarkup,
   qwenToolInstructions,
+  normalizeGoalToolText,
   normalizeRunCommand,
+  normalizeRunCommandSequence,
   validateGoalEvidence,
   automaticGoalText,
   isCasualGreeting,
@@ -334,6 +336,42 @@ test("normalizes a safe command accidentally placed in the executable field", ()
   });
 });
 
+test("normalizes native and nested Qwen goal payloads", () => {
+  assert.equal(
+    normalizeGoalToolText({ text: "Ship the parser" }),
+    "Ship the parser",
+  );
+  assert.equal(
+    normalizeGoalToolText({
+      goal: { objective: "Verify the compiler output" },
+    }),
+    "Verify the compiler output",
+  );
+  assert.equal(
+    normalizeGoalToolText({ arguments: { value: "Finish the workspace" } }),
+    "Finish the workspace",
+  );
+  assert.throws(() => normalizeGoalToolText({ text: {} }), /goal text/i);
+});
+
+test("splits only bounded safe sequential development commands", () => {
+  assert.deepEqual(
+    normalizeRunCommandSequence(
+      "cc -o fibonacci fibonacci.c && ./fibonacci",
+      undefined,
+    ),
+    [
+      { command: "cc", args: ["-o", "fibonacci", "fibonacci.c"] },
+      { command: "./fibonacci", args: [] },
+    ],
+  );
+  assert.throws(
+    () =>
+      normalizeRunCommandSequence("node build.mjs | tee build.log", undefined),
+    /sequential|executable/i,
+  );
+});
+
 test("requires distinct CRUD evidence and an update implementation", () => {
   assert.throws(
     () =>
@@ -543,6 +581,8 @@ test("shows Qwen the development command and args form", () => {
   assert.match(prompt, /command is "npm"/);
   assert.match(prompt, /args is \["run", "build"\]/);
   assert.match(prompt, /shell operators[^.]+not interpreted/);
+  assert.match(prompt, /compilers (?:including|such as) cc/);
+  assert.match(prompt, /short compile-and-run sequence/);
 });
 
 test("tells Qwen to use the dedicated Python package tool", () => {

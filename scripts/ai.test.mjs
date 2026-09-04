@@ -3383,6 +3383,33 @@ test("local models can own a chat goal, queue follow-up work, and schedule it", 
   assert.equal(completed.goals[0].status, "complete");
 });
 
+test("Qwen goal variants update the active goal without producing tool errors", async (t) => {
+  const { base, service, chat } = await fixture();
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const changed = new Set();
+  const first = await service.runTool(
+    { name: "set_goal", arguments: { goal: { objective: "Ship the parser" } } },
+    "auto",
+    changed,
+    [],
+    false,
+    false,
+    chat.id,
+  );
+  assert.match(first, /Ship the parser/);
+  const repeated = await service.runTool(
+    { name: "set_goal", arguments: { arguments: {} } },
+    "auto",
+    changed,
+    [],
+    false,
+    false,
+    chat.id,
+  );
+  assert.match(repeated, /Active goal remains/);
+  assert.doesNotMatch(repeated, /Tool error/);
+});
+
 test("local models cannot complete a goal without verification evidence", async (t) => {
   const { base, service, chat } = await fixture();
   t.after(() => fs.rm(base, { recursive: true, force: true }));

@@ -60,10 +60,16 @@ test("live context, reasoning, work output, and Stop stay visible", () => {
   assert.match(aiPanel, /className="ai-action-output"/);
   assert.match(aiPanel, /open=\{messageIndex === messages\.length - 1\}/);
   assert.match(ai, /const thinkingTranscript = \(\) =>/);
+  assert.doesNotMatch(ai, /thinkingSteps\.join\("\\n\\n---\\n\\n"\)/);
+  assert.doesNotMatch(aiPanel, /current\.reasoning\.trim\(\)\}\\n\\n---\\n\\n/);
   assert.match(ai, /output: publicToolOutput\(action\.tool, result, status\)/);
   assert.match(
     styles,
     /Keep the live transport controls fixed inside the composer/,
+  );
+  assert.match(
+    styles,
+    /\.ai-composer > \.ai-composer-stop-button[\s\S]*?background: var\(--control-hover-fill\)/,
   );
 });
 
