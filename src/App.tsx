@@ -29,6 +29,7 @@ import {
 } from "./lib/chat-collection-actions";
 import { publicAssistantText } from "./lib/public-assistant-text";
 import { chatListPreview } from "./lib/chat-list-preview";
+import { sortChatsByRecentActivity } from "./lib/chat-order";
 import type {
   AgentActivity,
   AiAgentState,
@@ -950,7 +951,7 @@ export function App() {
   }, [view]);
   const filteredChats = useMemo(() => {
     const query = chatSearch.trim().toLowerCase();
-    return agentState.chats.filter(
+    return sortChatsByRecentActivity(agentState.chats).filter(
       (chat) =>
         (collectionFilter === "all" ||
           (collectionFilter === "favorites" && chat.favorite) ||

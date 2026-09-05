@@ -17,6 +17,7 @@ const preload = read("electron/preload/index.cts");
 const ai = read("electron/main/ai.ts");
 const chatCollectionActions = read("src/lib/chat-collection-actions.ts");
 const chatListPreview = read("src/lib/chat-list-preview.ts");
+const chatOrder = read("src/lib/chat-order.ts");
 
 test("MLX built-in models stay in the Small, Medium, and Large selector", () => {
   assert.doesNotMatch(
@@ -58,7 +59,7 @@ test("live context, reasoning, work output, and Stop stay visible", () => {
   assert.match(aiPanel, /className="ai-composer-stop-divider"/);
   assert.match(aiPanel, /className="ai-composer-stop-button"/);
   assert.match(aiPanel, /className="ai-action-output"/);
-  assert.match(aiPanel, /open=\{messageIndex === messages\.length - 1\}/);
+  assert.match(aiPanel, /className="ai-reasoning ai-live-reasoning" open/);
   assert.match(ai, /const thinkingTranscript = \(\) =>/);
   assert.doesNotMatch(ai, /thinkingSteps\.join\("\\n\\n---\\n\\n"\)/);
   assert.doesNotMatch(aiPanel, /current\.reasoning\.trim\(\)\}\\n\\n---\\n\\n/);
@@ -725,5 +726,36 @@ test("live work output stays padded without a blue focus rail", () => {
   assert.match(
     styles,
     /\.oschat-app \.ai-action-output > summary \{[\s\S]*?min-height: 44px;[\s\S]*?padding: 10px 14px;/,
+  );
+});
+
+test("recent chats follow their latest saved activity", () => {
+  assert.match(
+    chatOrder,
+    /chatActivityTime\(right\) - chatActivityTime\(left\)/,
+  );
+  assert.match(
+    app,
+    /sortChatsByRecentActivity\(agentState\.chats\)[\s\S]{0,80}\.filter/,
+  );
+  assert.match(
+    aiPanel,
+    /sortChatsByRecentActivity\(agentState\.chats\)[\s\S]{0,80}\.filter/,
+  );
+});
+
+test("completed answers collapse history and use the next reading size", () => {
+  assert.doesNotMatch(
+    ai,
+    /className="ai-(?:reasoning|response-actions)"\s+open=\{messageIndex/,
+  );
+  assert.match(aiPanel, /className="ai-reasoning ai-live-reasoning" open/);
+  assert.match(
+    styles,
+    /Conversation reading scale and completed-answer hierarchy[\s\S]*font-size: 15px !important;/,
+  );
+  assert.match(
+    styles,
+    /\.chat-artifact-card > header b[\s\S]{0,100}color: var\(--accent\);[\s\S]{0,100}font-weight: 750;/,
   );
 });

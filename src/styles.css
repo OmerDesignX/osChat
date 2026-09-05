@@ -17653,3 +17653,30 @@ button > svg * {
   margin: 0;
   padding: 12px 14px 15px;
 }
+
+/* Conversation reading scale and completed-answer hierarchy. Persisted model
+   notes and work logs stay available as collapsed history; the live variants
+   remain open while a response is being generated. */
+.oschat-main.chat-view .ai-message > p,
+.oschat-main.chat-view .ai-message-content,
+.oschat-app :where(.ai-message-content, .chat-artifact-copy),
+.oschat-app
+  :where(.ai-message-content, .chat-artifact-copy)
+  :where(p, li, ul, ol, blockquote, table) {
+  font-size: 15px !important;
+}
+
+.oschat-app :where(.ai-message-content, .chat-artifact-copy) :where(h1, h2) {
+  font-size: 19px !important;
+}
+
+.oschat-app :where(.ai-message-content, .chat-artifact-copy) :where(h3, h4) {
+  font-size: 17px !important;
+}
+
+.oschat-main.chat-view .ai-message.assistant .ai-message-author > span,
+.oschat-app .chat-artifact-card > header b {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 750;
+}

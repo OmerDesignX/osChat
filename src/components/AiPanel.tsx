@@ -4,6 +4,7 @@ import { FeatherIcon } from "./FeatherIcon";
 import { IconButton } from "./IconButton";
 import { AiMessageContent, type ChatArtifactPayload } from "./AiMessageContent";
 import { publicAssistantText } from "../lib/public-assistant-text";
+import { sortChatsByRecentActivity } from "../lib/chat-order";
 import osChatIcon from "../assets/oschat-icon.png";
 import type {
   AiActionEntry,
@@ -2826,9 +2827,7 @@ export function AiPanel({
                   <FeatherIcon icon="plus" size="17" /> New chat
                 </button>
                 <div className="ai-chat-list">
-                  {agentState.chats
-                    .slice()
-                    .reverse()
+                  {sortChatsByRecentActivity(agentState.chats)
                     .filter((chat) =>
                       `${chat.title} ${chat.messages.map((message) => message.content).join(" ")}`
                         .toLowerCase()
@@ -3745,7 +3744,7 @@ export function AiPanel({
             )}
           </div>
         )}
-        {messages.map((message, messageIndex) => (
+        {messages.map((message) => (
           <article
             className={`ai-message ${message.role}`}
             key={message.id || `${message.role}-${message.createdAt}`}
@@ -3769,10 +3768,7 @@ export function AiPanel({
               )}
             </header>
             {thinkingEnabled && message.thinking && (
-              <details
-                className="ai-reasoning"
-                open={messageIndex === messages.length - 1}
-              >
+              <details className="ai-reasoning">
                 <summary>
                   <span>
                     <FeatherIcon icon="cpu" size="14" />
@@ -3786,10 +3782,7 @@ export function AiPanel({
               </details>
             )}
             {!!message.actions?.length && (
-              <details
-                className="ai-response-actions"
-                open={messageIndex === messages.length - 1}
-              >
+              <details className="ai-response-actions">
                 <summary>
                   <span>
                     <FeatherIcon icon="activity" size="14" />
