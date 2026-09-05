@@ -17430,3 +17430,226 @@ button > svg * {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Filled pill rows and live update notifications ---------------------------
+   Keep repeated surfaces roomy and neutral; baby blue belongs to icons,
+   selection, and the single action that advances an update. */
+.oschat-app .ai-permission-body {
+  gap: 16px;
+  padding: 18px 20px 42px;
+}
+
+.oschat-app .ai-permission-body .ai-permission-tools {
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
+}
+
+.oschat-app .ai-permission-body .ai-permission-list {
+  gap: 14px;
+  padding-inline: 2px;
+}
+
+.oschat-app .ai-permission-body .ai-permission-row {
+  min-height: 78px;
+  grid-template-columns: 30px minmax(0, 1fr) 42px;
+  gap: 14px;
+  padding: 15px 14px 15px 20px;
+  border: 0 !important;
+  border-radius: 26px;
+  background: var(--oschat-control-fill);
+  box-shadow: none !important;
+}
+
+.oschat-app .ai-permission-body .ai-permission-row > svg,
+.oschat-app .ai-permission-body .ai-permission-tools > label > svg,
+.oschat-app .notification-list article > span > svg {
+  color: var(--accent);
+}
+
+.oschat-app .oschat-notification-panel {
+  width: min(480px, calc(100vw - 28px));
+  padding: 12px;
+  border: 0;
+  border-radius: 28px;
+}
+
+.oschat-app .oschat-notification-panel > header {
+  min-height: 72px;
+  padding: 10px 8px 16px 14px;
+}
+
+.oschat-app .notification-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+}
+
+.oschat-app .notification-list article {
+  min-height: 84px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 14px;
+  margin: 0;
+  padding: 17px 18px;
+  border: 0;
+  border-radius: 24px;
+  background: var(--oschat-control-fill);
+  box-shadow: none;
+}
+
+.oschat-app .notification-list article:hover,
+.oschat-app .notification-list article.chat-linked:focus-visible {
+  outline: 0;
+  background: var(--oschat-hover-fill);
+}
+
+.oschat-app .notification-list article > span {
+  width: 30px;
+  height: 30px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.oschat-app .notification-list article > div {
+  gap: 6px;
+}
+
+.oschat-app .notification-list article b {
+  font-size: 14px;
+}
+
+.oschat-app .notification-list article p {
+  font-size: 13px !important;
+  line-height: 1.5;
+}
+
+.notification-update-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.notification-update-actions progress {
+  min-width: 90px;
+  flex: 1 1 auto;
+  height: 7px;
+  accent-color: var(--accent);
+}
+
+.notification-update-actions button {
+  min-width: 108px;
+  min-height: 42px;
+  flex: 0 0 auto;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--onaccent);
+  font:
+    700 13px/1 Manrope,
+    sans-serif;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.notification-update-actions button:hover:not(:disabled) {
+  background: var(--accent2);
+}
+
+.notification-update-actions button:disabled {
+  background: var(--oschat-selected-fill);
+  color: var(--text);
+  cursor: default;
+  opacity: 1;
+}
+
+@media (max-width: 520px) {
+  .notification-update-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notification-update-actions button {
+    width: 100%;
+  }
+}
+
+/* Live work cards use the same inset rhythm as the rest of the chat. Keep the
+   phase indicator aligned with action icons, and never turn the Output
+   disclosure into a bright focus rail. */
+.oschat-app .ai-live-work .ai-thinking {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+}
+
+.oschat-app .ai-live-work .ai-phase-dots {
+  width: 32px;
+  justify-content: center;
+  gap: 4px;
+}
+
+.oschat-app .ai-live-work .ai-action-timeline.compact {
+  gap: 10px;
+  padding: 0 0 2px;
+}
+
+.oschat-app .ai-live-work .ai-action-timeline.compact .ai-action-card {
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+}
+
+.oschat-app .ai-action-output {
+  margin: 12px 0 0;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 16px;
+  outline: 0 !important;
+  background: color-mix(in srgb, var(--panel2) 88%, var(--chat-bg));
+  box-shadow: none !important;
+}
+
+.oschat-app .ai-action-output:focus,
+.oschat-app .ai-action-output:focus-visible,
+.oschat-app .ai-action-output > summary:focus,
+.oschat-app .ai-action-output > summary:focus-visible {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.oschat-app .ai-action-output > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 16px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.oschat-app .ai-action-output > summary:hover,
+.oschat-app .ai-action-output > summary:focus-visible {
+  background: var(--oschat-hover-fill);
+  color: var(--text);
+}
+
+.oschat-app .ai-action-output[open] > summary {
+  border-radius: 16px 16px 0 0;
+}
+
+.oschat-app .ai-action-output > pre {
+  margin: 0;
+  padding: 12px 14px 15px;
+}

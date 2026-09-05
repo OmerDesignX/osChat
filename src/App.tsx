@@ -58,6 +58,7 @@ type AppNotice = {
   detail: string;
   createdAt: string;
   readAt?: string;
+  updateState?: AppUpdateStatus["state"];
   kind:
     | "response"
     | "permission"
@@ -309,6 +310,24 @@ export function App() {
     );
   }, []);
 
+  const runUpdateAction = useCallback(async () => {
+    try {
+      if (updateStatus.state === "ready") {
+        setUpdateStatus(await window.oscode.installAppUpdate());
+        return;
+      }
+      if (updateStatus.state !== "available") return;
+      const downloaded = await window.oscode.downloadAppUpdate();
+      setUpdateStatus(downloaded);
+      if (!autoUpdateEnabled && downloaded.state === "ready")
+        setUpdateStatus(await window.oscode.installAppUpdate());
+    } catch (error) {
+      const detail = errorMessage(error);
+      setNotice(detail);
+      addNotification("Update needs attention", detail, "error");
+    }
+  }, [addNotification, autoUpdateEnabled, updateStatus.state]);
+
   const refreshArtifacts = useCallback(async () => {
     const next = await window.oscode.listArtifacts();
     setArtifacts(next);
@@ -411,15 +430,50 @@ export function App() {
     [],
   );
   useEffect(() => {
-    if (["available", "ready", "error"].includes(updateStatus.state))
-      addNotification(
-        updateStatus.state === "error"
-          ? "Update check needs attention"
-          : "Update available",
-        updateStatus.message,
-        "update",
-      );
-  }, [addNotification, updateStatus.message, updateStatus.state]);
+    if (
+      !["available", "downloading", "ready", "installing", "error"].includes(
+        updateStatus.state,
+      )
+    )
+      return;
+    const detail = updateStatus.message.trim();
+    if (!detail) return;
+    const title =
+      updateStatus.state === "downloading"
+        ? "Downloading update"
+        : updateStatus.state === "ready"
+          ? "Update ready to install"
+          : updateStatus.state === "installing"
+            ? "Installing update"
+            : updateStatus.state === "error"
+              ? "Update check needs attention"
+              : "Update available";
+    setNotifications((current) => {
+      const existing = current.find((item) => item.kind === "update");
+      if (
+        existing?.title === title &&
+        existing.detail === detail &&
+        existing.updateState === updateStatus.state
+      )
+        return current;
+      const next: AppNotice = {
+        id: existing?.id || newId(),
+        title,
+        detail,
+        kind: "update",
+        updateState: updateStatus.state,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        readAt:
+          existing?.updateState === updateStatus.state
+            ? existing.readAt
+            : undefined,
+      };
+      return [
+        next,
+        ...current.filter((item) => item.id !== existing?.id),
+      ].slice(0, 100);
+    });
+  }, [updateStatus.message, updateStatus.state]);
   useEffect(
     () =>
       window.oscode.onAgentActivity((next) => {
@@ -1178,6 +1232,44 @@ export function App() {
                   <b>{item.title}</b>
                   <p>{publicAssistantText(item.detail)}</p>
                   <time>{new Date(item.createdAt).toLocaleString()}</time>
+                  {item.kind === "update" &&
+                    [
+                      "available",
+                      "downloading",
+                      "ready",
+                      "installing",
+                    ].includes(updateStatus.state) && (
+                      <div className="notification-update-actions">
+                        {updateStatus.state === "downloading" &&
+                          typeof updateStatus.percent === "number" && (
+                            <progress
+                              max={100}
+                              value={updateStatus.percent}
+                              aria-label={`Update download ${updateStatus.percent}%`}
+                            />
+                          )}
+                        <button
+                          type="button"
+                          disabled={["downloading", "installing"].includes(
+                            updateStatus.state,
+                          )}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void runUpdateAction();
+                          }}
+                        >
+                          {updateStatus.state === "downloading"
+                            ? `Downloading${typeof updateStatus.percent === "number" ? ` ${updateStatus.percent}%` : ""}…`
+                            : updateStatus.state === "installing"
+                              ? "Installing…"
+                              : updateStatus.state === "ready"
+                                ? "Install"
+                                : autoUpdateEnabled
+                                  ? "Download"
+                                  : "Install"}
+                        </button>
+                      </div>
+                    )}
                 </div>
               </article>
             ))}
@@ -1783,12 +1875,8 @@ export function App() {
           checkUpdate={async () =>
             setUpdateStatus(await window.oscode.checkForAppUpdate())
           }
-          downloadUpdate={async () =>
-            setUpdateStatus(await window.oscode.downloadAppUpdate())
-          }
-          installUpdate={async () =>
-            setUpdateStatus(await window.oscode.installAppUpdate())
-          }
+          downloadUpdate={runUpdateAction}
+          installUpdate={runUpdateAction}
           openSecureData={() => void window.oscode.openSecureData()}
         />
       )}
@@ -2086,7 +2174,12 @@ function SettingsDialog(props: SettingsProps) {
                       className="primary"
                       onClick={() => void props.downloadUpdate()}
                     >
-                      Download
+                      {props.autoUpdateEnabled ? "Download" : "Install"}
+                    </button>
+                  )}
+                  {props.updateStatus.state === "downloading" && (
+                    <button type="button" className="primary" disabled>
+                      Downloading…
                     </button>
                   )}
                   {props.updateStatus.state === "ready" && (
@@ -2096,6 +2189,11 @@ function SettingsDialog(props: SettingsProps) {
                       onClick={() => void props.installUpdate()}
                     >
                       Install and restart
+                    </button>
+                  )}
+                  {props.updateStatus.state === "installing" && (
+                    <button type="button" className="primary" disabled>
+                      Installing…
                     </button>
                   )}
                 </div>

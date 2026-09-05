@@ -594,6 +594,17 @@ test("update UI appears only for a real available or ready package", () => {
   );
 });
 
+test("update notifications expose live, padded download and install actions", () => {
+  assert.match(app, /className="notification-update-actions"/);
+  assert.match(app, /"downloading",\s*"ready",\s*"installing"/);
+  assert.match(app, /Downloading\$\{typeof updateStatus\.percent/);
+  assert.match(app, /autoUpdateEnabled[\s\S]*?"Install"/);
+  assert.match(
+    styles,
+    /\.notification-update-actions button \{[\s\S]*?min-height: 42px;[\s\S]*?border-radius: 999px;[\s\S]*?background: var\(--accent\)/,
+  );
+});
+
 test("Computer Control keeps a persistent blue banner and red emergency stop", () => {
   assert.match(app, /Computer Control active/);
   assert.match(app, /Press <kbd>Esc<\/kbd> anywhere to stop/);
@@ -695,5 +706,24 @@ test("dropdowns, color swatches, permissions, and model lists share one inset rh
   assert.match(
     styles,
     /\.oschat-app \.settings-model-list \{[\s\S]*?gap: 10px;/,
+  );
+});
+
+test("live work output stays padded without a blue focus rail", () => {
+  assert.match(
+    styles,
+    /Live work cards use the same inset rhythm[\s\S]*?\.oschat-app \.ai-live-work \.ai-thinking \{[\s\S]*?grid-template-columns: 32px minmax\(0, 1fr\);[\s\S]*?padding: 13px 16px;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-live-work \.ai-action-timeline\.compact \.ai-action-card \{[\s\S]*?grid-template-columns: 32px minmax\(0, 1fr\);[\s\S]*?padding: 16px;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-action-output:focus-visible,[\s\S]*?> summary:focus-visible \{[\s\S]*?outline: 0 !important;[\s\S]*?box-shadow: none !important;/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-action-output > summary \{[\s\S]*?min-height: 44px;[\s\S]*?padding: 10px 14px;/,
   );
 });
