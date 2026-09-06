@@ -9,6 +9,7 @@ import {
   attachmentContextForModel,
   hasRenderableInteractiveContent,
   hasPrivateAttachmentContext,
+  isUsableBrowserInspection,
   isTrustedOllamaDownloadUrl,
   isPackageInstallCommand,
   llamaMediaArguments,
@@ -17,6 +18,7 @@ import {
   ollamaCliAssetName,
   pythonPackageInstallSpecs,
   requiredProjectImageDownloadCount,
+  requiresBrowserInteractionVerification,
   requiresInteractiveChatContent,
   requiresProjectMutation,
   shouldRetryLlamaOnCpu,
@@ -53,12 +55,39 @@ test("interactive chat completion recognizes only renderable artifact payloads",
     hasRenderableInteractiveContent("```oschat-widget\n{not valid json}\n```"),
     false,
   );
+  const nativeWidgets = [
+    { type: "checklist", items: [{ label: "Ship it", checked: false }] },
+    {
+      type: "quiz",
+      questions: [{ question: "Ready?", options: ["No", "Yes"], answer: 1 }],
+    },
+    { type: "poll", options: ["One", "Two"] },
+    { type: "counter" },
+    { type: "timer" },
+    { type: "flashcards", cards: [{ front: "Q", back: "A" }] },
+    {
+      type: "calculator",
+      fields: [{ id: "amount", label: "Amount", value: 2 }],
+      formula: "amount * 2",
+    },
+  ];
+  for (const widget of nativeWidgets) {
+    assert.equal(
+      hasRenderableInteractiveContent(
+        `\`\`\`oschat-widget\n${JSON.stringify(widget)}\n\`\`\``,
+      ),
+      true,
+      `${widget.type} should be recognized as a complete native interactive view`,
+    );
+  }
   for (const type of [
+    "document",
+    "table",
+    "chart",
+    "metric",
     "checklist",
     "quiz",
     "poll",
-    "counter",
-    "timer",
     "flashcards",
     "calculator",
   ]) {
@@ -66,8 +95,8 @@ test("interactive chat completion recognizes only renderable artifact payloads",
       hasRenderableInteractiveContent(
         `\`\`\`oschat-widget\n${JSON.stringify({ type })}\n\`\`\``,
       ),
-      true,
-      `${type} should be recognized as a native interactive view`,
+      false,
+      `${type} must not pass without its required content`,
     );
   }
   assert.equal(
@@ -81,6 +110,31 @@ test("interactive chat completion recognizes only renderable artifact payloads",
       "| Car | Speed |\n| --- | --- |\n| A | 320 |",
     ),
     true,
+  );
+});
+
+test("interactive app work requires a non-empty post-interaction browser inspection", () => {
+  assert.equal(
+    requiresBrowserInteractionVerification(
+      "Create an interactive to-do app with buttons and navigation",
+    ),
+    true,
+  );
+  assert.equal(
+    requiresBrowserInteractionVerification("Create a plain markdown file"),
+    false,
+  );
+  assert.equal(
+    isUsableBrowserInspection(
+      JSON.stringify({ title: "Todo", text: "Tasks\nAdd task", controls: [] }),
+    ),
+    true,
+  );
+  assert.equal(
+    isUsableBrowserInspection(
+      JSON.stringify({ title: "Todo", text: "", controls: [] }),
+    ),
+    false,
   );
 });
 
@@ -3057,6 +3111,185 @@ test("code-only implementation replies are discarded and replaced by real file a
   assert.match(
     await fs.readFile(path.join(root, "generated.mjs"), "utf8"),
     /saved and verified/,
+  );
+});
+
+test("interactive apps cannot finish before a usable post-click browser check", async (t) => {
+  const browserSteps = [];
+  let clicked = false;
+  const { root, base, service, chat } = await fixture({
+    serviceOptions: {
+      browserOpen: async (url) => {
+        browserSteps.push(`open:${url}`);
+        return `Opened ${url} in the dedicated agent browser`;
+      },
+      browserInspect: async () => {
+        browserSteps.push(
+          clicked ? "inspect:after-click" : "inspect:before-click",
+        );
+        return JSON.stringify({
+          title: "Tasks",
+          text: clicked ? "Tasks\nOne new task" : "Tasks\nAdd a task",
+          controls: [{ index: 0, tag: "button", label: "Add task" }],
+        });
+      },
+      browserClick: async (query) => {
+        clicked = true;
+        browserSteps.push(`click:${query}`);
+        return `Clicked ${query}`;
+      },
+    },
+  });
+  t.after(async () => {
+    await service.dispose();
+    await fs.rm(base, { recursive: true, force: true });
+  });
+  await service.grantPermission(
+    "browser.control",
+    "conversation",
+    chat.id,
+    "tests",
+  );
+  const originalRunTool = service.runTool.bind(service);
+  service.runTool = async (call, ...args) =>
+    call.name === "run_command"
+      ? JSON.stringify({ exitCode: 0, stdout: "build passed", stderr: "" })
+      : originalRunTool(call, ...args);
+
+  let turn = 0;
+  service.remoteReply = async (_request, messages) => {
+    turn += 1;
+    if (turn === 1)
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "write-app",
+            name: "write_file",
+            arguments: {
+              path: "index.html",
+              content:
+                '<!doctype html><button id="add">Add task</button><main>Tasks</main>',
+            },
+          },
+        ],
+      };
+    if (turn === 2)
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "verify-app",
+            name: "run_command",
+            arguments: { command: "node", args: ["--version"] },
+          },
+        ],
+      };
+    if (turn === 3) {
+      assert.equal(
+        browserSteps.length,
+        0,
+        "a passing build alone must not count as interaction verification",
+      );
+      return { content: "The app is complete.", toolCalls: [] };
+    }
+    if (turn === 4) {
+      assert.match(
+        String(messages.at(-1)?.content || ""),
+        /Browser-verification correction/,
+      );
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "open-app",
+            name: "browser_open",
+            arguments: { url: "index.html" },
+          },
+        ],
+      };
+    }
+    if (turn === 5)
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "inspect-app",
+            name: "browser_inspect",
+            arguments: {},
+          },
+        ],
+      };
+    if (turn === 6)
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "click-app",
+            name: "browser_click",
+            arguments: { query: "Add task" },
+          },
+        ],
+      };
+    if (turn === 7)
+      return {
+        content: "",
+        toolCalls: [
+          {
+            id: "inspect-updated-app",
+            name: "browser_inspect",
+            arguments: {},
+          },
+        ],
+      };
+    return {
+      content: [
+        "Created, built, and interaction-tested the task app.",
+        "```oschat-widget",
+        '{"type":"document","title":"Task app","content":"The add-task flow was verified in the preview."}',
+        "```",
+      ].join("\n"),
+      toolCalls: [],
+    };
+  };
+
+  const response = await service.chat({
+    chatId: chat.id,
+    engine: "mlx",
+    model: "fixture-mlx",
+    executable: "",
+    editMode: "auto",
+    terminalMode: "auto",
+    contextLimit: 8192,
+    contextSummary: "",
+    goal: "",
+    fileAccess: true,
+    webAccess: false,
+    browserAccess: true,
+    computerAccess: false,
+    messages: [
+      {
+        role: "user",
+        content:
+          "Create an interactive to-do app with an Add task button and navigation, then verify it.",
+      },
+    ],
+  });
+
+  assert.ok(
+    turn >= 8 && turn <= 10,
+    `expected bounded completion after browser verification, received ${turn} model turns`,
+  );
+  assert.deepEqual(browserSteps, [
+    "open:index.html",
+    "inspect:before-click",
+    "click:Add task",
+    "inspect:after-click",
+  ]);
+  assert.match(response.content, /interaction-tested/);
+  assert.match(
+    await fs.readFile(path.join(root, "index.html"), "utf8"),
+    /Add task/,
   );
 });
 

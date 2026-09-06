@@ -1290,28 +1290,113 @@ export function normalizePublicAssistantIdentity(content?: string) {
 const interactiveChatBlock =
   /```oschat-(?:artifact|widget)\s*\n([\s\S]*?)```/gi;
 
-const renderableInteractiveTypes = new Set([
-  "document",
-  "spreadsheet",
-  "presentation",
-  "table",
-  "chart",
-  "metric",
-  "checklist",
-  "quiz",
-  "poll",
-  "counter",
-  "timer",
-  "flashcards",
-  "calculator",
-]);
+function presentText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function completeInteractivePayload(value: unknown) {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Record<string, unknown>;
+  const type = String(payload.type || "");
+  if (type === "document" || type === "presentation")
+    return presentText(payload.content);
+  if (type === "table" || type === "spreadsheet") {
+    const headers = Array.isArray(payload.headers)
+      ? payload.headers.filter(presentText)
+      : [];
+    const rows = Array.isArray(payload.rows)
+      ? payload.rows.filter(
+          (row) =>
+            Array.isArray(row) &&
+            row.some(
+              (cell) =>
+                cell !== null &&
+                cell !== undefined &&
+                presentText(String(cell)),
+            ),
+        )
+      : [];
+    return headers.length > 0 && rows.length > 0;
+  }
+  if (type === "chart") {
+    const labels = Array.isArray(payload.labels)
+      ? payload.labels.filter(presentText)
+      : [];
+    const values = Array.isArray(payload.values)
+      ? payload.values.filter((item) => Number.isFinite(Number(item)))
+      : [];
+    return labels.length > 0 && labels.length === values.length;
+  }
+  if (type === "metric")
+    return (
+      payload.value !== undefined &&
+      payload.value !== null &&
+      presentText(String(payload.value))
+    );
+  if (type === "checklist")
+    return (
+      Array.isArray(payload.items) &&
+      payload.items.some((item) =>
+        presentText(
+          typeof item === "string"
+            ? item
+            : (item as Record<string, unknown> | null)?.label,
+        ),
+      )
+    );
+  if (type === "quiz")
+    return (
+      Array.isArray(payload.questions) &&
+      payload.questions.some((item) => {
+        const question = item as Record<string, unknown> | null;
+        const options = Array.isArray(question?.options)
+          ? question.options.filter(presentText)
+          : [];
+        const answer = Number(question?.answer);
+        return (
+          presentText(question?.question) &&
+          options.length >= 2 &&
+          Number.isInteger(answer) &&
+          answer >= 0 &&
+          answer < options.length
+        );
+      })
+    );
+  if (type === "poll")
+    return (
+      Array.isArray(payload.options) &&
+      payload.options.filter((item) =>
+        presentText(
+          typeof item === "string"
+            ? item
+            : (item as Record<string, unknown> | null)?.label,
+        ),
+      ).length >= 2
+    );
+  if (type === "flashcards")
+    return (
+      Array.isArray(payload.cards) &&
+      payload.cards.some((item) => {
+        const card = item as Record<string, unknown> | null;
+        return presentText(card?.front) && presentText(card?.back);
+      })
+    );
+  if (type === "calculator")
+    return (
+      Array.isArray(payload.fields) &&
+      payload.fields.some((item) => {
+        const field = item as Record<string, unknown> | null;
+        return presentText(field?.id) && presentText(field?.label);
+      }) &&
+      presentText(payload.formula)
+    );
+  return type === "counter" || type === "timer";
+}
 
 export function hasRenderableInteractiveContent(content: string) {
   for (const match of content.matchAll(interactiveChatBlock)) {
     try {
-      const value = JSON.parse(match[1]) as { type?: unknown };
-      if (value && renderableInteractiveTypes.has(String(value.type)))
-        return true;
+      if (completeInteractivePayload(JSON.parse(match[1]))) return true;
     } catch {
       // A malformed protocol block is not renderable and must be corrected.
     }
@@ -1323,6 +1408,30 @@ export function hasRenderableInteractiveContent(content: string) {
       /^\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*:?-{3,}:?\s*\|?\s*$/.test(line) &&
       lines[index - 1]?.includes("|"),
   );
+}
+
+export function requiresBrowserInteractionVerification(message: string) {
+  const text = message.replace(/\s+/g, " ").trim();
+  return (
+    requiresProjectMutation(text) &&
+    /\b(?:app|application|dashboard|gui|interface|page|site|webapp|website)\b/i.test(
+      text,
+    ) &&
+    /\b(?:button|click|form|interactive|navigation|screen|tab|to[ -]?do|tracker|workflow)\b/i.test(
+      text,
+    )
+  );
+}
+
+export function isUsableBrowserInspection(result: string) {
+  try {
+    const value = JSON.parse(result) as { text?: unknown; controls?: unknown };
+    const text = typeof value.text === "string" ? value.text.trim() : "";
+    const controls = Array.isArray(value.controls) ? value.controls : [];
+    return text.length >= 12 || controls.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 export function requiresInteractiveChatContent(message: string) {
@@ -1996,6 +2105,9 @@ export class LocalAiService {
       call: ToolCall;
       wroteProjectFile?: boolean;
       verifiedProjectWork?: boolean;
+      browserOpened?: boolean;
+      browserInteracted?: boolean;
+      browserInteractionVerified?: boolean;
       changedFiles?: string[];
       toolSteps?: string[];
       waitingPermissionKind?: AiPermissionKind;
@@ -5080,7 +5192,8 @@ export class LocalAiService {
       "EXECUTION CONTRACT FOR EVERY CREATION OR IMPLEMENTATION REQUEST: Step 1 inspect the osChat workspace with list_files and read_file. Step 2 call write_file with complete content for every required file; on later turns, read the existing file and write the improved version back to the same path instead of merely replying with replacement content. Use copy_file for an existing binary or text file that needs another workspace location. Use delete_path, never a terminal deletion command, when the user explicitly asks to remove an existing item; each deletion always receives a fresh one-time Move to Trash approval. Step 3 install Python dependencies with python_install_packages when needed; never install them through run_command. Use web_search for generic public discovery and web_download_image for every requested public image that must be saved locally; never put private workspace or attachment content into a query. Step 4 run the smallest relevant check when the deliverable is executable or structured. Step 5 only after the artifact or files are saved and any relevant verification succeeds, give a short final result. Until Step 5, the response must be the next tool call. Do not paste a requested implementation into chat instead of saving it.",
       "PRODUCTIVITY WORKSPACES: documents live in Documents, spreadsheets in Spreadsheets, and presentations in Presentations. A native editable artifact is one UTF-8 JSON file named <safe-id>.oschat.json. Use an identifier of 8-80 letters, digits, hyphens, or underscores. The record is {id,kind,title,createdAt,updatedAt,data}. Document data is {html,plainText,page:'letter'|'a4',zoom:number}. Spreadsheet data is {sheets:[{id,name,cells:string[][],styles:{}}],activeSheetId}; formulas begin with = and can use arithmetic or SUM, AVERAGE, MIN, and MAX ranges. Presentation data is {slides:[{id,title,body,notes,background,layout:'title'|'section'|'blank'}],activeSlideId,theme:'gunmetal'|'blue'|'light'}. Read the existing artifact before revising it and preserve its identifiers. Use ISO timestamps. A comparison or multi-row table belongs in a spreadsheet artifact, not a document containing a JSON description of a table. Saving an .oschat.json file is internal persistence and never counts as showing the result to the user. Never expose the internal .oschat.json filename or raw storage record in user-facing prose.",
       'INTERACTIVE CHAT COMPLETION CONTRACT: every substantive answer MUST include exactly one immediately renderable interactive view in addition to a concise prose summary. The fenced JSON is an internal UI protocol that osChat removes from prose and renders as a native card; do not describe it as JSON or ask the user to open a file. Use ```oschat-widget with valid JSON shaped as {"type":"table","title":"...","description":"...","headers":["..."],"rows":[["..."]]} for every comparison, schedule, timeline, option matrix, ranking, or multi-row result; use type chart with labels and numeric values for quantitative trends; use type metric with value and unit for one important value; or use type document with title and content for substantive prose that has no better structured view. Use ```oschat-artifact with type document, spreadsheet, or presentation plus title, description, content, and data matching the saved native artifact whenever a workspace artifact was created or revised. The payload must contain the actual result, not a path or a promise. A saved artifact and its rendered chat card must agree. Do not finish a table, document, spreadsheet, presentation, chart, GUI, dashboard, or widget request without its visible interactive block. Only a greeting, brief acknowledgement, permission wait, or concise clarification may omit it. Cite every public research answer with direct HTTPS source links in the prose summary.',
-      'MINI WIDGETS: when the user asks for a little GUI, interactive tool, practice activity, tracker, or control, choose the closest native declarative widget instead of writing HTML or JavaScript. Available shapes are: checklist {"type":"checklist","title":"Launch plan","items":[{"label":"Confirm date","checked":false}]}; quiz {"type":"quiz","title":"Quick quiz","questions":[{"question":"Which answer?","options":["A","B"],"answer":1,"explanation":"Why B is correct."}]}; poll {"type":"poll","title":"Team choice","question":"Which direction?","options":[{"label":"Option A","votes":0},{"label":"Option B","votes":0}]}; counter {"type":"counter","title":"Water tracker","value":0,"min":0,"max":8,"step":1}; timer {"type":"timer","title":"Focus sprint","durationSeconds":1500}; flashcards {"type":"flashcards","title":"Study cards","cards":[{"front":"Question","back":"Answer","hint":"Optional hint"}]}; calculator {"type":"calculator","title":"Tip calculator","fields":[{"id":"bill","label":"Bill","value":50,"min":0,"max":500,"step":1,"unit":"$"},{"id":"tip","label":"Tip","value":20,"min":0,"max":40,"step":1,"unit":"%"}],"formula":"bill * (1 + tip / 100)","resultLabel":"Total","resultUnit":"$","precision":2}. Calculator formulas may contain only field identifiers, numbers, parentheses, +, -, *, /, %, ^, and abs, ceil, floor, max, min, pow, round, or sqrt. These widgets are local session controls: use them for direct interaction, not durable multi-user data. Never emit HTML, CSS, scripts, event handlers, URLs, or executable code inside a widget. Keep labels concise and payloads focused.',
+      'MINI WIDGETS: when the user asks for a little GUI, interactive tool, practice activity, tracker, to-do list, checklist, or control, choose the closest native declarative widget instead of writing HTML or JavaScript unless the user explicitly asks for a standalone app, website, or source files. Available shapes are: checklist {"type":"checklist","title":"Launch plan","items":[{"label":"Confirm date","checked":false}]}; quiz {"type":"quiz","title":"Quick quiz","questions":[{"question":"Which answer?","options":["A","B"],"answer":1,"explanation":"Why B is correct."}]}; poll {"type":"poll","title":"Team choice","question":"Which direction?","options":[{"label":"Option A","votes":0},{"label":"Option B","votes":0}]}; counter {"type":"counter","title":"Water tracker","value":0,"min":0,"max":8,"step":1}; timer {"type":"timer","title":"Focus sprint","durationSeconds":1500}; flashcards {"type":"flashcards","title":"Study cards","cards":[{"front":"Question","back":"Answer","hint":"Optional hint"}]}; calculator {"type":"calculator","title":"Tip calculator","fields":[{"id":"bill","label":"Bill","value":50,"min":0,"max":500,"step":1,"unit":"$"},{"id":"tip","label":"Tip","value":20,"min":0,"max":40,"step":1,"unit":"%"}],"formula":"bill * (1 + tip / 100)","resultLabel":"Total","resultUnit":"$","precision":2}. Every requested item and action must be present and functional in the payload. Native widgets never navigate to another screen. Calculator formulas may contain only field identifiers, numbers, parentheses, +, -, *, /, %, ^, and abs, ceil, floor, max, min, pow, round, or sqrt. These widgets are local session controls: use them for direct interaction, not durable multi-user data. Never emit HTML, CSS, scripts, event handlers, URLs, or executable code inside a widget. Keep labels concise and payloads focused.',
+      "GENERATED APP COMPLETION: a standalone interactive app, page, dashboard, or website is incomplete until its files are saved, its exact build or syntax check passes, and it is exercised in the dedicated agent browser. Start or open the real preview, inspect it, click each primary navigation path and representative action, then inspect the resulting view after every click. A blank, placeholder, setup-only, dead-end, or unreachable screen is a failed verification: repair it and repeat the browser check before claiming completion. Keep the generated UI consistent with osChat: compact Playfair headings, Manrope body text, baby-blue icons, pill action buttons with at least a 44px target, 14–20px horizontal padding, clear gaps, and no clipped labels.",
       "A tool result is new authoritative context. After each result, continue with the next distinct required tool. Do not repeat a successful call, do not merely narrate the next step, and do not claim completion before reading verification output. Keep visible reasoning before a tool concise (at most about 120 words) and emit the next tool call as soon as its arguments are known. Web discovery is limited to two searches per task; after that, choose a returned source URL and call web_fetch or web_download_image instead of refining the search again.",
       "If the project is empty, choose a conventional minimal structure from the user's request and create the necessary files directly. For PlatformIO, call platformio_boards and then platformio_initialize so the board ID and starter project are validated before editing. Do not ask which filename to use unless two materially different products are genuinely possible.",
       "GOLDEN UNCERTAINTY RULE: never silently stop, guess a material hardware/product choice, or give up because context is genuinely missing. If the available project state and tool results still leave two materially different safe actions, ask one concise, specific question in chat and explain exactly which choice is needed. Concrete tool or compiler errors are not ambiguity: inspect them, change the approach, and keep working.",
@@ -6498,12 +6611,18 @@ json.dump({'content':out},sys.stdout)`;
     let correctedMissingProjectAction = 0;
     let correctedMissingVerification = 0;
     let correctedMissingInteractiveContent = 0;
+    let correctedMissingBrowserVerification = 0;
     let forcePlatformioBuild = false;
     let wroteProjectFile = false;
     let verifiedProjectWork = false;
+    let browserOpened = false;
+    let browserInteracted = false;
+    let browserInteractionVerified = false;
+    let browserStateEpoch = 0;
     let stalledProjectSteps = 0;
     let progressGuardMessage = "";
-    let forcedAgentPhase: "write" | "verify" | "finish" | null = null;
+    let forcedAgentPhase: "write" | "verify" | "browser" | "finish" | null =
+      null;
     const thinkingSteps: string[] = [];
     const rememberThinking = (value?: string) => {
       const next = normalizePublicAssistantIdentity(value || "")
@@ -6534,6 +6653,9 @@ json.dump({'content':out},sys.stdout)`;
       requiresStructuredInteractiveChatContent(workRequest);
     const implementationRequest =
       request.editMode !== "read-only" && requiresProjectMutation(workRequest);
+    const browserVerificationRequired =
+      implementationRequest &&
+      requiresBrowserInteractionVerification(workRequest);
     const platformioVerificationRequested =
       /\b(?:platformio|pio|esp32|arduino|firmware|microcontroller|embedded)\b/i.test(
         workRequest,
@@ -6599,6 +6721,10 @@ json.dump({'content':out},sys.stdout)`;
       toolSteps.push(...(continued.toolSteps || []));
       wroteProjectFile = continued.wroteProjectFile === true;
       verifiedProjectWork = continued.verifiedProjectWork === true;
+      browserOpened = continued.browserOpened === true;
+      browserInteracted = continued.browserInteracted === true;
+      browserInteractionVerified =
+        continued.browserInteractionVerified === true;
       let result: string;
       const action = startToolAction(continued.call);
       try {
@@ -6633,6 +6759,31 @@ json.dump({'content':out},sys.stdout)`;
           );
         if (continued.call.name === "write_file" && /^Saved /i.test(result))
           wroteProjectFile = true;
+        if (
+          continued.call.name === "browser_open" &&
+          /^Opened /i.test(result)
+        ) {
+          browserOpened = true;
+          browserInteracted = false;
+          browserInteractionVerified = false;
+          browserStateEpoch += 1;
+        }
+        if (
+          continued.call.name === "browser_click" &&
+          !/^Tool error:/i.test(result)
+        ) {
+          browserInteracted = true;
+          browserInteractionVerified = false;
+          browserStateEpoch += 1;
+        }
+        if (
+          continued.call.name === "browser_inspect" &&
+          browserInteracted &&
+          isUsableBrowserInspection(result)
+        ) {
+          browserInteractionVerified = true;
+          if (verifiedProjectWork) forcedAgentPhase = "finish";
+        }
         if (continued.call.name === "run_command") {
           try {
             const commandResult = JSON.parse(result) as {
@@ -6780,6 +6931,15 @@ json.dump({'content':out},sys.stdout)`;
                 return ["write_file", "copy_file", "delete_path"].includes(
                   name,
                 );
+              if (forcedAgentPhase === "browser")
+                return [
+                  "run_command",
+                  "browser_open",
+                  "browser_inspect",
+                  "browser_click",
+                  "browser_type",
+                  "browser_close",
+                ].includes(name);
               return [
                 "run_command",
                 "run_debug",
@@ -6848,6 +7008,23 @@ json.dump({'content':out},sys.stdout)`;
           continue;
         }
         if (
+          browserVerificationRequired &&
+          verifiedProjectWork &&
+          !browserInteractionVerified &&
+          correctedMissingBrowserVerification < 3
+        ) {
+          correctedMissingBrowserVerification += 1;
+          forcedAgentPhase = "browser";
+          appendSystemCorrection(
+            browserOpened
+              ? browserInteracted
+                ? "Browser-verification correction: the generated app was clicked, but the resulting view was not inspected as a usable, non-empty screen. Call browser_inspect now. If it is blank, a placeholder, or a dead end, repair the project, reopen the preview, and repeat the interaction check."
+                : "Browser-verification correction: the generated app opened, but no primary control or navigation path was exercised. Inspect it if needed, call browser_click on a real primary control, then call browser_inspect again and repair any blank or incomplete resulting view."
+              : "Browser-verification correction: the build passed, but this interactive app has not been opened and exercised. Start a localhost preview when needed, call browser_open, browser_inspect, browser_click on a primary control, and browser_inspect again before finishing.",
+          );
+          continue;
+        }
+        if (
           structuredInteractiveContentRequired &&
           !hasRenderableInteractiveContent(reply.content) &&
           correctedMissingInteractiveContent < 2
@@ -6882,6 +7059,25 @@ json.dump({'content':out},sys.stdout)`;
           return {
             content:
               "I saved the requested project files, but the local model did not complete a valid build, test, compile, or syntax check. The files are available for review, but I am not marking the implementation verified.",
+            thinking: thinkingTranscript(),
+            retainedMessages,
+            changedFiles: [...changed],
+            toolSteps,
+            actions,
+            pendingEdits,
+            contextSummary,
+            usage: {
+              used: Math.min(request.contextLimit, estimatedTokens(messages)),
+              limit: request.contextLimit,
+              compacted,
+            },
+          };
+        }
+        if (browserVerificationRequired && !browserInteractionVerified) {
+          this.options.status("Ready · interaction check incomplete");
+          return {
+            content:
+              "I saved and built the generated app, but it did not pass the required open, interact, and inspect-again check. The files remain available for repair; I am not presenting the app as complete.",
             thinking: thinkingTranscript(),
             retainedMessages,
             changedFiles: [...changed],
@@ -6945,9 +7141,16 @@ json.dump({'content':out},sys.stdout)`;
           toolStatus[call.name] || "Processing the next step…",
         );
         let result: string;
-        const stateSensitive =
-          call.name === "run_command" || call.name === "platformio_run";
-        const signature = `${call.name}:${JSON.stringify(call.arguments)}${stateSensitive ? `:project-state-${projectStateEpoch}` : ""}`;
+        const projectStateSensitive =
+          call.name === "run_command" ||
+          call.name === "platformio_run" ||
+          call.name === "browser_open";
+        const browserStateSensitive = [
+          "browser_inspect",
+          "browser_click",
+          "browser_type",
+        ].includes(call.name);
+        const signature = `${call.name}:${JSON.stringify(call.arguments)}${projectStateSensitive ? `:project-state-${projectStateEpoch}` : ""}${browserStateSensitive ? `:browser-state-${browserStateEpoch}` : ""}`;
         const repeated = (repeatedCalls.get(signature) || 0) + 1;
         repeatedCalls.set(signature, repeated);
         const earlierSuccess = successfulCalls.get(signature);
@@ -7066,6 +7269,30 @@ json.dump({'content':out},sys.stdout)`;
             }
             if (call.name === "platformio_run" && !/^Tool error:/i.test(result))
               verifiedProjectWork = true;
+            if (call.name === "browser_open" && /^Opened /i.test(result)) {
+              browserOpened = true;
+              browserInteracted = false;
+              browserInteractionVerified = false;
+              browserStateEpoch += 1;
+            }
+            if (
+              call.name === "browser_click" &&
+              !/^Tool error:/i.test(result)
+            ) {
+              browserInteracted = true;
+              browserInteractionVerified = false;
+              browserStateEpoch += 1;
+            }
+            if (
+              call.name === "browser_inspect" &&
+              !/^Tool error:/i.test(result)
+            ) {
+              const usableInspection = isUsableBrowserInspection(result);
+              if (browserInteracted && usableInspection) {
+                browserInteractionVerified = true;
+                if (verifiedProjectWork) forcedAgentPhase = "finish";
+              }
+            }
             let toolSucceeded =
               !/^Tool error:/i.test(result) &&
               !(call.name === "write_file" && /^No change:/i.test(result));
@@ -7110,7 +7337,11 @@ json.dump({'content':out},sys.stdout)`;
                   !/"alreadyInstalled"\s*:\s*true/i.test(result)));
             if (changedProjectState) projectStateEpoch += 1;
             if (changedProjectState) madeProjectProgressThisStep = true;
-            if (verifiedProjectWork) forcedAgentPhase = "finish";
+            if (verifiedProjectWork)
+              forcedAgentPhase =
+                browserVerificationRequired && !browserInteractionVerified
+                  ? "browser"
+                  : "finish";
             toolSteps.push(
               call.name === "write_file"
                 ? `${request.editMode === "ask" ? "Proposed" : "Edited"} ${String(call.arguments.path || "file")}`
@@ -7137,6 +7368,9 @@ json.dump({'content':out},sys.stdout)`;
               call,
               wroteProjectFile,
               verifiedProjectWork,
+              browserOpened,
+              browserInteracted,
+              browserInteractionVerified,
               changedFiles: [...changed],
               toolSteps: [...toolSteps],
               waitingPermissionKind: requiredPermission.kind,

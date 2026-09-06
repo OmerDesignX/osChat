@@ -131,6 +131,44 @@ function artifactIcon(type: ChatArtifactPayload["type"]) {
   return "file-text";
 }
 
+function hasText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isRenderableArtifact(value: ChatArtifactPayload) {
+  if (value.type === "document" || value.type === "presentation")
+    return hasText(value.content);
+  if (value.type === "table" || value.type === "spreadsheet")
+    return (
+      Array.isArray(value.headers) &&
+      value.headers.some(hasText) &&
+      Array.isArray(value.rows) &&
+      value.rows.some(
+        (row) =>
+          Array.isArray(row) &&
+          row.some(
+            (cell) =>
+              cell !== null && cell !== undefined && hasText(String(cell)),
+          ),
+      )
+    );
+  if (value.type === "chart")
+    return (
+      Array.isArray(value.labels) &&
+      value.labels.some(hasText) &&
+      Array.isArray(value.values) &&
+      value.labels.length === value.values.length &&
+      value.values.every((item) => Number.isFinite(Number(item)))
+    );
+  if (value.type === "metric")
+    return (
+      value.value !== undefined &&
+      value.value !== null &&
+      hasText(String(value.value))
+    );
+  return false;
+}
+
 function csvCell(value: unknown) {
   const source = String(value ?? "");
   return /[",\r\n]/.test(source) ? `"${source.replace(/"/g, '""')}"` : source;
@@ -480,7 +518,8 @@ export function AiMessageContent({ content, onOpenArtifact }: Props) {
               "table",
               "chart",
               "metric",
-            ].includes(value.type)
+            ].includes(value.type) &&
+            isRenderableArtifact(value)
           ) {
             artifacts.push(value);
           }

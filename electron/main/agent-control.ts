@@ -337,6 +337,59 @@ const inspectScript = `(() => {
   });
 })()`;
 
+const browserSafetyControlsScript = `(() => {
+  if (document.documentElement.querySelector('#oschat-agent-browser-safety')) return;
+  const host = document.createElement('div');
+  host.id = 'oschat-agent-browser-safety';
+  host.setAttribute('aria-label', 'Agent browser controls');
+  Object.assign(host.style, {
+    position: 'fixed', left: '20px', bottom: '20px', zIndex: '2147483647',
+    pointerEvents: 'auto', fontFamily: 'Manrope, system-ui, -apple-system, sans-serif'
+  });
+  const root = host.attachShadow({ mode: 'closed' });
+  const style = document.createElement('style');
+  style.textContent = \`
+    :host { all: initial; }
+    nav { display: flex; align-items: center; gap: 8px; padding: 8px;
+      border: 1px solid rgba(137,207,240,.24); border-radius: 999px;
+      background: rgba(31,36,37,.96); color: #edf2f4;
+      box-shadow: 0 16px 44px rgba(0,0,0,.38); backdrop-filter: blur(18px); }
+    button { min-width: 44px; height: 44px; display: inline-flex; align-items: center;
+      justify-content: center; gap: 8px; padding: 0 16px; border: 0;
+      border-radius: 999px; background: #2b3132; color: #edf2f4;
+      font: 650 14px/1 Manrope, system-ui, -apple-system, sans-serif; cursor: pointer; }
+    button:hover, button:focus-visible { background: #89cff0; color: #10222b; outline: 0; }
+    button:last-child { width: 44px; padding: 0; }
+    span { color: #89cff0; font-size: 21px; line-height: 1; }
+    button:hover span, button:focus-visible span { color: currentColor; }
+  \`;
+  const nav = document.createElement('nav');
+  const button = (label, glyph, action, compact = false) => {
+    const control = document.createElement('button');
+    control.type = 'button';
+    control.setAttribute('aria-label', label);
+    control.title = label;
+    control.innerHTML = '<span aria-hidden="true">' + glyph + '</span>' + (compact ? '' : label);
+    control.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === 'back') history.back();
+      else if (action === 'reload') location.reload();
+      else location.href = 'oschat-agent-control://close';
+    });
+    return control;
+  };
+  nav.append(button('Back', '‹', 'back'), button('Reload', '↻', 'reload', true), button('Close preview', '×', 'close', true));
+  root.append(style, nav);
+  document.documentElement.append(host);
+})()`;
+
+async function installBrowserSafetyControls(contents: WebContents) {
+  await contents
+    .executeJavaScript(browserSafetyControlsScript, true)
+    .catch(() => undefined);
+}
+
 const webMcpToolsScript = `(async () => {
   const context = document.modelContext;
   if (!context || typeof context.getTools !== 'function') {
@@ -1026,10 +1079,35 @@ export class AgentControlService {
     });
     window.webContents.setUserAgent("osChat Agent Browser");
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    window.webContents.on("will-navigate", (event, url) => {
+      if (!url.startsWith("oschat-agent-control://close")) return;
+      event.preventDefault();
+      window.close();
+    });
     window.webContents.on("before-input-event", (event, input) => {
       if (input.key === "Escape") {
         event.preventDefault();
         void this.stop();
+        return;
+      }
+      if (
+        input.type === "keyDown" &&
+        (input.key === "BrowserBack" ||
+          (input.alt && input.key === "ArrowLeft") ||
+          (input.meta && input.key === "["))
+      ) {
+        event.preventDefault();
+        const navigation = window.webContents.navigationHistory;
+        if (navigation.canGoBack()) navigation.goBack();
+        return;
+      }
+      if (
+        input.type === "keyDown" &&
+        (input.meta || input.control) &&
+        input.key.toLowerCase() === "r"
+      ) {
+        event.preventDefault();
+        window.webContents.reload();
       }
     });
     window.webContents.on("did-start-loading", () => {
@@ -1044,6 +1122,7 @@ export class AgentControlService {
     });
     window.webContents.on("did-finish-load", () => {
       const url = window.webContents.getURL();
+      void installBrowserSafetyControls(window.webContents);
       let label = "Agent browser is open";
       try {
         label = `Agent browser · ${new URL(url).hostname || "project preview"}`;

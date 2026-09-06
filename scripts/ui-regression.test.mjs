@@ -15,6 +15,7 @@ const productivity = read("src/components/ProductivityWorkspaceV2.tsx");
 const main = read("electron/main/index.ts");
 const preload = read("electron/preload/index.cts");
 const ai = read("electron/main/ai.ts");
+const agentControl = read("electron/main/agent-control.ts");
 const chatCollectionActions = read("src/lib/chat-collection-actions.ts");
 const chatListPreview = read("src/lib/chat-list-preview.ts");
 const chatOrder = read("src/lib/chat-order.ts");
@@ -539,6 +540,8 @@ test("the local agent prompt understands osChat artifacts and still acts through
   assert.match(ai, /every substantive answer MUST include exactly one/);
   assert.match(ai, /MINI WIDGETS/);
   assert.match(ai, /Never emit HTML, CSS, scripts, event handlers/);
+  assert.match(ai, /GENERATED APP COMPLETION/);
+  assert.match(ai, /inspect the resulting view after every click/);
   assert.match(ai, /Saving an \.oschat\.json file is internal persistence/);
   assert.match(ai, /Interactive-output correction/);
   assert.match(ai, /hasRenderableInteractiveContent/);
@@ -546,6 +549,27 @@ test("the local agent prompt understands osChat artifacts and still acts through
   assert.match(ai, /call write_file with complete content/);
   assert.match(ai, /Never derive or enrich a web query/);
   assert.match(ai, /PROMPT-INJECTION RULE/);
+});
+
+test("generated previews retain padded back, reload, and close controls", () => {
+  assert.match(agentControl, /oschat-agent-browser-safety/);
+  assert.match(agentControl, /button\('Back'/);
+  assert.match(agentControl, /button\('Reload'/);
+  assert.match(agentControl, /button\('Close preview'/);
+  assert.match(agentControl, /border-radius: 999px/);
+  assert.match(agentControl, /padding: 0 16px/);
+  assert.match(agentControl, /navigationHistory/);
+});
+
+test("mini-widget actions use consistent padded pill controls", () => {
+  assert.match(
+    styles,
+    /\.mini-widget-button \{[\s\S]*?min-height: 44px;[\s\S]*?padding: 0 18px;[\s\S]*?border-radius: 999px;/,
+  );
+  assert.match(
+    styles,
+    /\.mini-widget-checklist label \{[\s\S]*?padding: 10px 14px;[\s\S]*?border-radius: 18px;/,
+  );
 });
 
 test("responsive layouts scroll dense horizontal menus rather than crushing controls", () => {
