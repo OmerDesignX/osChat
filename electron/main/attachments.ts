@@ -157,7 +157,7 @@ async function pdfText(data: Buffer) {
     disableFontFace: true,
     standardFontDataUrl: `${fileURLToPath(
       new URL("../../node_modules/pdfjs-dist/standard_fonts/", import.meta.url),
-    )}${path.sep}`,
+    ).replace(/[\\/]+$/, "")}/`,
     useWorkerFetch: false,
   });
   const document = await loading.promise;

@@ -3005,30 +3005,47 @@ async function runSmokeTest(window: BrowserWindow) {
         `new-chat renderer assertions failed: ${JSON.stringify(newChatResult)}`,
       );
 
-    const contentBounds = window.getContentBounds();
+    await window.webContents.executeJavaScript(
+      `(() => {
+        const model = document.querySelector('.ai-composer-controls.workspace > .ai-tier-toggle');
+        if (!model) return false;
+        model.style.pointerEvents = 'none';
+        return true;
+      })()`,
+      true,
+    );
     window.webContents.sendInputEvent({
       type: "mouseMove",
-      x: Math.max(24, Math.floor(contentBounds.width / 2)),
-      y: 32,
+      x: 1,
+      y: 1,
     });
     await new Promise((resolve) => setTimeout(resolve, 220));
     const footerControlsResult = (await window.webContents.executeJavaScript(
       `(async () => {
         const controls = document.querySelector('.ai-composer-controls.workspace');
-        const model = controls?.querySelector(':scope > .ai-tier-toggle');
+        const liveModel = controls?.querySelector(':scope > .ai-tier-toggle');
         const permission = controls?.querySelector(':scope > .ai-capability-drawer > .ai-capability-toggle');
         const goal = controls?.querySelector(':scope > .ai-inline-goal > button');
         const composer = document.querySelector('.ai-composer textarea');
-        if (!controls || !model || !permission || !goal || !composer)
+        if (!controls || !liveModel || !permission || !goal || !composer)
           return { ready: false };
-        if (model.getAttribute('aria-expanded') === 'true') {
-          model.click();
+        if (liveModel.getAttribute('aria-expanded') === 'true') {
+          liveModel.click();
           await new Promise((resolve) => setTimeout(resolve, 220));
         }
-        // Rosetta can retain the host pointer's previous :hover target even
-        // after sendInputEvent moves it. Ignore pointer targeting while this
-        // probe exercises the same controls through their keyboard focus path.
+        // Hidden Electron windows can retain the host pointer's previous
+        // :hover target after sendInputEvent moves it. Exercise the same CSS
+        // focus path with a temporary non-hit-testable copy of the button.
+        const model = liveModel.cloneNode(true);
+        model.setAttribute('aria-expanded', 'false');
         model.style.pointerEvents = 'none';
+        liveModel.style.display = 'none';
+        controls.appendChild(model);
+        const permissionDrawer = permission.parentElement;
+        const goalContainer = goal.parentElement;
+        for (const element of [model, permissionDrawer, goalContainer]) {
+          if (element) element.style.transition = 'none';
+        }
         composer.focus();
         await new Promise((resolve) => setTimeout(resolve, 220));
         const resting = [model, permission, goal].map((button) => button.getBoundingClientRect().width);
@@ -3048,7 +3065,11 @@ async function runSmokeTest(window: BrowserWindow) {
         await new Promise((resolve) => setTimeout(resolve, 220));
         const goalExpanded = goal.getBoundingClientRect().width;
         composer.focus();
-        model.style.removeProperty('pointer-events');
+        for (const element of [model, permissionDrawer, goalContainer]) {
+          if (element) element.style.removeProperty('transition');
+        }
+        model.remove();
+        liveModel.style.removeProperty('display');
         return {
           ready: true,
           resting,

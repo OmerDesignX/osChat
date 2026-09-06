@@ -17,6 +17,13 @@ const platformKey = `${process.platform}-${process.arch}`;
 const archiveName = targets[platformKey];
 if (!archiveName)
   throw new Error(`Unsupported Python bundle target: ${platformKey}`);
+const windowsRoot = process.env.SystemRoot || process.env.WINDIR;
+if (process.platform === "win32" && !windowsRoot)
+  throw new Error("The Windows system directory was not found");
+const archiveTool =
+  process.platform === "win32"
+    ? path.join(windowsRoot, "System32", "tar.exe")
+    : "tar";
 
 const root = path.resolve("vendor");
 const uvName = process.platform === "win32" ? "uv.exe" : "uv";
@@ -117,9 +124,15 @@ try {
     const extracted = path.join(temporary, `extracted-${targetKey}`);
     await fs.writeFile(archivePath, archive);
     await fs.mkdir(extracted);
-    const unpack = spawnSync("tar", ["-xf", archivePath, "-C", extracted], {
-      stdio: "inherit",
-    });
+    const unpack = spawnSync(
+      archiveTool,
+      ["-xf", path.basename(archivePath), "-C", path.basename(extracted)],
+      {
+        cwd: temporary,
+        stdio: "inherit",
+      },
+    );
+    if (unpack.error) throw unpack.error;
     if (unpack.status !== 0)
       throw new Error(`uv extraction exited ${unpack.status} for ${targetKey}`);
 

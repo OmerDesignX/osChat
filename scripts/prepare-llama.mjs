@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import {
   chmod,
   cp,
@@ -18,6 +18,15 @@ import { spawnSync } from "node:child_process";
 
 const root = path.resolve(import.meta.dirname, "..");
 const version = "b10517";
+const windowsRoot = process.env.SystemRoot || process.env.WINDIR;
+if (process.platform === "win32" && !windowsRoot)
+  throw new Error("The Windows system directory was not found");
+const archiveTool =
+  process.platform === "win32"
+    ? path.join(windowsRoot, "System32", "tar.exe")
+    : "tar";
+if (process.platform === "win32" && !existsSync(archiveTool))
+  throw new Error("The Windows archive tool was not found");
 const assets = {
   "darwin-arm64": {
     name: "llama-b10517-bin-macos-arm64.tar.gz",
@@ -34,6 +43,10 @@ const assets = {
   "linux-x64-vulkan": {
     name: "llama-b10517-bin-ubuntu-vulkan-x64.tar.gz",
     sha256: "0740df99b45a384672ae5983e1cc32f6c831a08e78d6f192691944cb39b6840d",
+  },
+  "win32-x64": {
+    name: "llama-b10517-bin-win-cpu-x64.zip",
+    sha256: "f3fed0673c934ade45663a8e29220a0903b58ad7eff91eeeef606a37061cd031",
   },
   "win32-x64-vulkan": {
     name: "llama-b10517-bin-win-vulkan-x64.zip",
@@ -52,6 +65,11 @@ const sourceAsset = {
   name: "llama.cpp-b10517.tar.gz",
   url: "https://github.com/ggml-org/llama.cpp/archive/refs/tags/b10517.tar.gz",
   sha256: "eff311dd10ee35647ebe9b129f51bb44965bc968bf5a723b074c430d450c4a10",
+};
+const windowsMsvcRuntimeAsset = {
+  name: "thinkgeo.dependency.microsoftvisualcruntime140.14.5.4.nupkg",
+  url: "https://api.nuget.org/v3-flatcontainer/thinkgeo.dependency.microsoftvisualcruntime140/14.5.4/thinkgeo.dependency.microsoftvisualcruntime140.14.5.4.nupkg",
+  sha256: "45569ca4bef1617cf34d03dcc7b4514808ffb4593e5690912ba2b099d124a12b",
 };
 
 const hashFile = async (file) => {
@@ -108,6 +126,53 @@ const copyDlls = async (source, destination, depth = 0) => {
   }
 };
 
+const windowsMsvcDependencies = [
+  "vcruntime140.dll",
+  "vcruntime140_1.dll",
+  "msvcp140.dll",
+];
+
+let windowsMsvcRuntimePromise;
+const readWindowsMsvcRuntime = async () => {
+  if (!windowsMsvcRuntimePromise)
+    windowsMsvcRuntimePromise = (async () => {
+      const downloadRoot = path.join(root, "work", "llama-runtime-archives");
+      const archive = path.join(downloadRoot, windowsMsvcRuntimeAsset.name);
+      const extraction = path.join(root, "work", "msvc-runtime-staging");
+      await mkdir(downloadRoot, { recursive: true });
+      if (
+        !(await stat(archive).catch(() => null))?.isFile() ||
+        (await hashFile(archive)) !== windowsMsvcRuntimeAsset.sha256
+      ) {
+        await rm(archive, { force: true });
+        await download(windowsMsvcRuntimeAsset, archive);
+      }
+      await rm(extraction, { recursive: true, force: true });
+      await mkdir(extraction, { recursive: true });
+      const unpack = spawnSync(
+        archiveTool,
+        ["-xf", archive, "-C", extraction],
+        {
+          encoding: "utf8",
+          timeout: 180_000,
+          windowsHide: true,
+        },
+      );
+      if (unpack.error) throw unpack.error;
+      if (unpack.status !== 0)
+        throw new Error(
+          `Unable to extract ${windowsMsvcRuntimeAsset.name}: ${unpack.stderr || unpack.stdout}`,
+        );
+      const nativeRoot = path.join(extraction, "runtimes", "win-x64", "native");
+      const dependencies = new Map();
+      for (const name of windowsMsvcDependencies)
+        dependencies.set(name, await readFile(path.join(nativeRoot, name)));
+      const license = await readFile(path.join(extraction, "LICENSE.txt"));
+      return { dependencies, license };
+    })();
+  return windowsMsvcRuntimePromise;
+};
+
 const runtimeReady = async (target, runtimeAssets, requiredDlls) => {
   try {
     const metadata = JSON.parse(
@@ -127,6 +192,7 @@ const runtimeReady = async (target, runtimeAssets, requiredDlls) => {
     for (const name of [
       "llama-completion.exe",
       "llama-mtmd-cli.exe",
+      "MSVC_RUNTIME_LICENSE.txt",
       ...requiredDlls,
     ])
       if (!(await stat(path.join(target, name))).isFile()) return false;
@@ -178,7 +244,7 @@ const prepareWindowsRuntime = async (
       asset.name.replace(/\.zip$/i, ""),
     );
     await mkdir(extraction, { recursive: true });
-    const unpack = spawnSync("tar", ["-xf", archive, "-C", extraction], {
+    const unpack = spawnSync(archiveTool, ["-xf", archive, "-C", extraction], {
       encoding: "utf8",
       timeout: 180_000,
     });
@@ -191,21 +257,18 @@ const prepareWindowsRuntime = async (
   const completion = await findFile(extracted[0], "llama-completion.exe");
   if (!completion)
     throw new Error(`${runtimeAssets[0].name} has no llama-completion.exe`);
+  const msvcRuntime = await readWindowsMsvcRuntime();
   await rm(target, { recursive: true, force: true });
   await mkdir(target, { recursive: true });
   await cp(path.dirname(completion), target, { recursive: true });
   for (const extraction of extracted.slice(1))
     await copyDlls(extraction, target);
-  for (const dependency of [
-    "vcruntime140.dll",
-    "vcruntime140_1.dll",
-    "msvcp140.dll",
-  ])
-    await cp(
-      path.join(root, "vendor", "llama", "win32-x64", dependency),
-      path.join(target, dependency),
-      { force: true },
-    );
+  for (const [dependency, contents] of msvcRuntime.dependencies)
+    await writeFile(path.join(target, dependency), contents);
+  await writeFile(
+    path.join(target, "MSVC_RUNTIME_LICENSE.txt"),
+    msvcRuntime.license,
+  );
   for (const entry of await readdir(target, { withFileTypes: true })) {
     const runtimeDll =
       entry.isFile() &&
@@ -218,6 +281,7 @@ const prepareWindowsRuntime = async (
     const keep =
       entry.isFile() &&
       (entry.name === "LICENSE" ||
+        entry.name === "MSVC_RUNTIME_LICENSE.txt" ||
         entry.name === "llama-completion.exe" ||
         entry.name === "llama-mtmd-cli.exe" ||
         runtimeDll);
@@ -258,22 +322,11 @@ const prepareWindowsRuntime = async (
 };
 
 if (process.platform === "win32") {
-  const completion = path.join(
-    root,
-    "vendor",
-    "llama",
+  await prepareWindowsRuntime(
     "win32-x64",
-    "llama-completion.exe",
+    [assets["win32-x64"]],
+    windowsMsvcDependencies,
   );
-  const check = spawnSync(completion, ["--version"], {
-    cwd: path.dirname(completion),
-    encoding: "utf8",
-    timeout: 10_000,
-    windowsHide: true,
-  });
-  if (check.status !== 0)
-    throw new Error("The checked-in Windows llama.cpp runtime is not ready");
-  console.log("Verified the checked-in Windows llama.cpp CPU runtime");
   await prepareWindowsRuntime(
     "win32-x64-vulkan",
     [assets["win32-x64-vulkan"]],
@@ -398,7 +451,13 @@ if (process.platform === "darwin") {
   }
   await rm(sourceRoot, { recursive: true, force: true });
   await mkdir(sourceRoot, { recursive: true });
-  run("tar", ["-xzf", sourceArchive, "-C", sourceRoot, "--strip-components=1"]);
+  run(archiveTool, [
+    "-xzf",
+    sourceArchive,
+    "-C",
+    sourceRoot,
+    "--strip-components=1",
+  ]);
 
   for (const targetName of missingTargets) {
     const architecture = targetName.endsWith("arm64") ? "arm64" : "x86_64";
@@ -516,7 +575,7 @@ for (const targetName of targets) {
   await rm(archive, { force: true });
   await download(asset, archive);
   const extraction = spawnSync(
-    "tar",
+    archiveTool,
     ["-xzf", archive, "-C", target, "--strip-components=1"],
     { encoding: "utf8", timeout: 120_000 },
   );
