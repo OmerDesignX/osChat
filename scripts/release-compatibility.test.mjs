@@ -83,6 +83,7 @@ test("native releases package local inference runtimes without model weights or 
       "llama-completion.exe",
       "llama-mtmd-cli.exe",
       "*.dll",
+      "MSVC_RUNTIME_LICENSE.txt",
       "!llama-server-impl.dll",
     ],
   );
@@ -94,6 +95,7 @@ test("native releases package local inference runtimes without model weights or 
       "llama-completion.exe",
       "llama-mtmd-cli.exe",
       "*.dll",
+      "MSVC_RUNTIME_LICENSE.txt",
       "OSCODE_RUNTIME.json",
     ],
   );
@@ -105,6 +107,7 @@ test("native releases package local inference runtimes without model weights or 
       "llama-completion.exe",
       "llama-mtmd-cli.exe",
       "*.dll",
+      "MSVC_RUNTIME_LICENSE.txt",
       "OSCODE_RUNTIME.json",
     ],
   );
@@ -116,6 +119,7 @@ test("native releases package local inference runtimes without model weights or 
       "llama-completion.exe",
       "llama-mtmd-cli.exe",
       "*.dll",
+      "MSVC_RUNTIME_LICENSE.txt",
       "OSCODE_RUNTIME.json",
     ],
   );
@@ -131,6 +135,14 @@ test("native releases package local inference runtimes without model weights or 
   assert.match(prepareLlama, /win32-x64-vulkan/);
   assert.match(prepareLlama, /llama-b10517-bin-win-cuda-12\.4-x64\.zip/);
   assert.match(prepareLlama, /llama-b10517-bin-win-cuda-13\.3-x64\.zip/);
+  assert.match(
+    prepareLlama,
+    /thinkgeo\.dependency\.microsoftvisualcruntime140\.14\.5\.4\.nupkg/,
+  );
+  assert.match(
+    prepareLlama,
+    /45569ca4bef1617cf34d03dcc7b4514808ffb4593e5690912ba2b099d124a12b/,
+  );
   assert.match(
     prepareLlama,
     /e144d3291f4f2615ed9af1baa39b6f4777591188c31e18f0f0a8ba5e4cb1db13/,

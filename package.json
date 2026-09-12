@@ -123,6 +123,7 @@
             "llama-completion.exe",
             "llama-mtmd-cli.exe",
             "*.dll",
+            "MSVC_RUNTIME_LICENSE.txt",
             "!llama-server-impl.dll"
           ]
         },
@@ -133,6 +134,7 @@
             "llama-completion.exe",
             "llama-mtmd-cli.exe",
             "*.dll",
+            "MSVC_RUNTIME_LICENSE.txt",
             "OSCODE_RUNTIME.json"
           ]
         },
@@ -143,6 +145,7 @@
             "llama-completion.exe",
             "llama-mtmd-cli.exe",
             "*.dll",
+            "MSVC_RUNTIME_LICENSE.txt",
             "OSCODE_RUNTIME.json"
           ]
         },
@@ -153,6 +156,7 @@
             "llama-completion.exe",
             "llama-mtmd-cli.exe",
             "*.dll",
+            "MSVC_RUNTIME_LICENSE.txt",
             "OSCODE_RUNTIME.json"
           ]
         },

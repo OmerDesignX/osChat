@@ -50,9 +50,23 @@ try {
     throw new Error("MinGit checksum did not match the pinned release");
   await writeFile(archive, bytes);
   await mkdir(extracted);
-  const unpack = spawnSync("tar", ["-xf", archive, "-C", extracted], {
-    stdio: "inherit",
-  });
+  // This script runs only on Windows. Use the native bsdtar because Git Bash's
+  // GNU tar does not unpack ZIP files and treats C:\\... as a remote archive.
+  // Relative names also keep the invocation independent of Windows path syntax.
+  const windowsRoot = process.env.SystemRoot || process.env.WINDIR;
+  if (!windowsRoot)
+    throw new Error("The Windows system directory was not found");
+  const tarExecutable = path.join(windowsRoot, "System32", "tar.exe");
+  if (!existsSync(tarExecutable))
+    throw new Error("The Windows archive tool was not found");
+  const unpack = spawnSync(
+    tarExecutable,
+    ["-xf", archiveName, "-C", path.basename(extracted)],
+    {
+      cwd: temporary,
+      stdio: "inherit",
+    },
+  );
   if (unpack.error) throw unpack.error;
   if (unpack.status !== 0)
     throw new Error(`MinGit extraction exited ${unpack.status}`);
