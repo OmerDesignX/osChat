@@ -13290,6 +13290,167 @@ button > svg * {
   }
 }
 
+/* Top-bar action grouping ---------------------------------------------------
+   Keep Notifications visually separate from the AI options while preserving
+   the compact circular controls used throughout osChat. */
+.oschat-app .oschat-top-actions {
+  gap: 2px;
+}
+
+.oschat-app .oschat-ai-top-controls,
+.oschat-app .oschat-ai-top-controls .ai-head-actions {
+  gap: 1px;
+}
+
+.oschat-app .oschat-top-divider {
+  display: block;
+  width: 1px;
+  height: 24px;
+  flex: 0 0 1px;
+  margin: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 42%, transparent);
+}
+
+@media (max-width: 760px) {
+  .oschat-app .oschat-top-divider {
+    display: none;
+  }
+}
+
+/* Media attachment tray -----------------------------------------------------
+   Keep pending images and documents together in one calm, theme-aware pill
+   above the composer. The row scrolls independently so attachments never
+   squeeze the message field or spill outside the conversation column. */
+.oschat-app {
+  --oschat-attachment-tray: color-mix(in srgb, var(--chat-bg) 86%, #000 14%);
+}
+
+.oschat-app.blue-dark {
+  --oschat-attachment-tray: color-mix(in srgb, var(--chat-bg) 82%, #000 18%);
+}
+
+.oschat-app.blue-light {
+  --oschat-attachment-tray: color-mix(
+    in srgb,
+    var(--chat-bg) 88%,
+    var(--text) 12%
+  );
+}
+
+.oschat-app .ai-attachments {
+  width: min(860px, calc(100% - 28px));
+  min-height: 76px;
+  flex: none;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px auto 0;
+  padding: 12px 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: inline proximity;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 44%, transparent) transparent;
+  border: 0;
+  border-radius: 999px;
+  background: var(--oschat-attachment-tray);
+}
+
+.oschat-app .ai-attachments::-webkit-scrollbar {
+  height: 5px;
+}
+
+.oschat-app .ai-attachments::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.oschat-app .ai-attachments::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 44%, transparent);
+}
+
+.oschat-app .ai-attachments figure {
+  width: 72px;
+  height: 56px;
+  flex: 0 0 72px;
+  scroll-snap-align: start;
+}
+
+.oschat-app .ai-attachments img {
+  border: 0;
+  border-radius: 14px;
+}
+
+.oschat-app .ai-attachments figure:has(.ai-attachment-file) {
+  width: min(220px, 60vw);
+  flex-basis: min(220px, 60vw);
+}
+
+.oschat-app .ai-attachment-file {
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--oschat-control-fill, var(--panel));
+}
+
+.oschat-app .ai-attachments figure > button {
+  top: -7px;
+  right: -7px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: var(--panel2);
+  color: var(--muted);
+}
+
+.oschat-app .ai-attachments figure > button:hover,
+.oschat-app .ai-attachments figure > button:focus-visible {
+  outline: 0;
+  background: var(--accent);
+  color: var(--onaccent);
+}
+
+.oschat-app .ai-attachments > .ai-attachment-add {
+  position: relative;
+  inset: auto;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--oschat-control-fill, var(--panel));
+  color: var(--accent);
+}
+
+.oschat-app .ai-attachments > .ai-attachment-add:hover,
+.oschat-app .ai-attachments > .ai-attachment-add:focus-visible {
+  outline: 0;
+  background: var(--accent);
+  color: var(--onaccent);
+}
+
+.oschat-app .ai-panel.expanded .ai-attachments {
+  width: min(980px, calc(100% - 32px));
+}
+
+@media (max-width: 680px) {
+  .oschat-app .ai-attachments,
+  .oschat-app .ai-panel.expanded .ai-attachments {
+    width: calc(100% - 20px);
+    min-height: 66px;
+    margin-top: 6px;
+    padding: 10px 12px;
+  }
+}
+
 /* osChat product polish: conversation-first shell and complete workspaces */
 .oschat-app {
   --oschat-sidebar-width: 278px;
@@ -17664,7 +17825,7 @@ button > svg * {
 .oschat-app
   :where(.ai-message-content, .chat-artifact-copy)
   :where(p, li, ul, ol, blockquote, table) {
-  font-size: 15px !important;
+  font-size: 14px !important;
 }
 
 .oschat-app :where(.ai-message-content, .chat-artifact-copy) :where(h1, h2) {
@@ -17678,6 +17839,232 @@ button > svg * {
 .oschat-main.chat-view .ai-message.assistant .ai-message-author > span,
 .oschat-app .chat-artifact-card > header b {
   color: var(--accent);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 750;
+}
+
+/* One 14px conversational baseline: tabs, authored messages, rendered answers,
+   and the composer match the established New chat label. Semantic answer
+   headings keep their compact Playfair hierarchy. */
+.oschat-app .ai-chat-tab > button:first-child > span,
+.oschat-main.chat-view .ai-message > p,
+.oschat-main.chat-view .ai-message-content,
+.oschat-main.chat-view
+  .ai-message-content
+  :where(p, li, ul, ol, blockquote, table),
+.oschat-main.chat-view .ai-composer textarea {
+  font-family: Manrope, sans-serif;
+  font-size: 14px !important;
+}
+
+/* Everyday UI copy follows the established New chat label scale. This rule
+   deliberately excludes New chat itself: its original sizing, shortcut badge,
+   padding, and pill geometry remain the reference instead of being restyled by
+   the controls it guides. Display headings, the wordmark, telemetry, badges,
+   and code retain their purpose-built scales. */
+.oschat-app {
+  --oschat-ui-text-size: 14px;
+}
+
+.oschat-app
+  :where(
+    button:not(.icon-button):not(.new-chat-button),
+    input:not([type="color"]),
+    select,
+    textarea,
+    .collection-browser > header,
+    .sidebar-list > header,
+    .folder-create-form,
+    .sidebar-list article > button:first-child > b,
+    .ai-message-author,
+    .ai-thinking,
+    .ai-action-card,
+    .ai-capability-copy,
+    .ai-chat-choice,
+    .ai-setting-row,
+    .ai-manager-actions,
+    .setting-group > header,
+    .setting-toggle,
+    .settings-callout,
+    .notification-list article > div
+  ) {
+  font-size: var(--oschat-ui-text-size) !important;
+}
+
+/* Restore the compact navigation contract after the shared UI label rule. */
+@media (max-width: 660px) {
+  .oschat-app
+    :where(
+      .workspace-nav button,
+      .oschat-sidebar footer button,
+      .oschat-settings > aside nav button
+    ) {
+    font-size: 0 !important;
+  }
+}
+
+/* 14px everyday UI contract -------------------------------------------------
+   New chat is the visual reference for ordinary interface copy. Keep display
+   headings, compact telemetry, keyboard badges, code, and icon geometry on
+   their purpose-built scales while the application's readable controls share
+   one predictable baseline. */
+.oschat-app {
+  --oschat-ui-text-size: 14px;
+  --oschat-ui-line-height: 1.45;
+}
+
+.oschat-app
+  :where(
+    button,
+    input:not([type="color"]),
+    select,
+    textarea,
+    .workspace-nav,
+    .notes-kind-nav,
+    .sidebar-list,
+    .collection-browser,
+    .global-search-results,
+    .sidebar-item-menu,
+    .ai-chat-tab-menu,
+    .ai-add-menu,
+    .export-menu,
+    .ai-message-author,
+    .ai-message-content,
+    .chat-artifact-copy
+  ) {
+  font-family: Manrope, sans-serif;
+  font-size: var(--oschat-ui-text-size);
+}
+
+.oschat-app
+  :where(
+    .new-chat-button,
+    .workspace-nav button,
+    .notes-kind-nav button,
+    .oschat-sidebar footer button,
+    .sidebar-list > header,
+    .collection-browser > header,
+    .sidebar-list article > button:first-child,
+    .sidebar-list article b,
+    .sidebar-list article small,
+    .folder-strip button,
+    .global-search,
+    .global-search input,
+    .global-search-results button,
+    .ai-chat-tab > button:first-child > span,
+    .ai-chat-tab-menu > button,
+    .sidebar-item-menu button,
+    .ai-add-menu button,
+    .export-menu button,
+    .export-menu > summary,
+    .ai-composer textarea,
+    .ai-message > p,
+    .ai-message-content,
+    .ai-message-content p,
+    .ai-message-content li,
+    .chat-artifact-copy,
+    .chat-artifact-copy p,
+    .chat-artifact-copy li,
+    .chat-artifact-actions button,
+    .ai-message-output-actions button
+  ) {
+  font-size: var(--oschat-ui-text-size) !important;
+}
+
+.oschat-app
+  :where(
+    .sidebar-list article > button:first-child,
+    .sidebar-list article b,
+    .sidebar-list article small,
+    .global-search,
+    .global-search input,
+    .ai-chat-tab > button:first-child > span,
+    .ai-composer textarea,
+    .ai-message > p,
+    .ai-message-content,
+    .chat-artifact-copy
+  ) {
+  line-height: var(--oschat-ui-line-height);
+}
+
+/* Permission search and action remain a real two-control row. It must not
+   inherit the generic horizontal-strip sizing or reopen at a stale scroll
+   offset, which previously made this area look like an empty bar. */
+.oschat-app .ai-permission-popover .ai-permission-body {
+  gap: 14px;
+  padding: 18px 20px 36px;
+}
+
+.oschat-app .ai-permission-popover .ai-permission-tools {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) max-content;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  overflow: visible !important;
+  border-radius: 28px;
+}
+
+.oschat-app .ai-permission-popover .ai-permission-tools > label {
+  width: auto;
+  min-width: 0;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  color: var(--muted);
+}
+
+.oschat-app .ai-permission-popover .ai-permission-tools > label > input {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  padding: 0;
+  color: var(--text);
+  font-size: var(--oschat-ui-text-size) !important;
+  line-height: 1.4;
+}
+
+.oschat-app .ai-permission-popover .ai-permission-tools > button {
+  width: auto;
+  min-width: max-content;
+  min-height: 50px;
+  padding: 0 20px;
+  font-size: var(--oschat-ui-text-size) !important;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.oschat-app .ai-permission-popover .ai-permission-row b,
+.oschat-app .ai-permission-popover .ai-permission-row span,
+.oschat-app .ai-permission-popover .ai-permission-list > p {
+  font-size: var(--oschat-ui-text-size) !important;
+  line-height: var(--oschat-ui-line-height);
+}
+
+@media (max-width: 680px) {
+  .oschat-app .ai-permission-popover .ai-permission-tools {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible !important;
+  }
+
+  .oschat-app .ai-permission-popover .ai-permission-tools > button {
+    width: 100%;
+  }
+}
+
+/* Compact navigation still hides labels intentionally. This comes last so
+   the shared 14px baseline never reintroduces text into icon-only layouts. */
+@media (max-width: 660px) {
+  .oschat-app
+    :where(
+      .workspace-nav button,
+      .oschat-sidebar footer button,
+      .oschat-settings > aside nav button
+    ) {
+    font-size: 0 !important;
+  }
 }

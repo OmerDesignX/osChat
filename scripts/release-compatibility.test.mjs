@@ -154,8 +154,11 @@ test("native releases package local inference runtimes without model weights or 
   const aiService = read("electron/main/ai.ts");
   assert.match(
     aiService,
-    /if \(hardware === "cpu"\) inferenceArguments\.push\("--gpu-layers", "0"\)/,
+    /hardware === "cpu"[\s\S]*?"--device",[\s\S]*?"none"[\s\S]*?"--gpu-layers",[\s\S]*?"0"/,
   );
+  assert.match(aiService, /export function llamaPerformanceArguments/);
+  assert.match(aiService, /"--cache-type-k",\s*cacheProfile\.llama/);
+  assert.match(aiService, /"--cache-type-v",\s*cacheProfile\.llama/);
   assert.doesNotMatch(aiService, /hardware === "cpu" \? "0" : "999"/);
   assert.match(aiService, /current\.acceleratorVersion\?\.startsWith\("12"\)/);
   const bundledModelRuntime = read("electron/main/bundled-models.ts");

@@ -7,14 +7,18 @@ import path from "node:path";
 import test from "node:test";
 import {
   attachmentContextForModel,
+  compactToolResultForModel,
+  fitPromptToContext,
   hasRenderableInteractiveContent,
   hasPrivateAttachmentContext,
   isUsableBrowserInspection,
   isTrustedOllamaDownloadUrl,
   isPackageInstallCommand,
   llamaMediaArguments,
+  llamaPerformanceArguments,
   localMediaMessages,
   LocalAiService,
+  kvCacheProfile,
   ollamaCliAssetName,
   pythonPackageInstallSpecs,
   requiredProjectImageDownloadCount,
@@ -23,8 +27,32 @@ import {
   requiresProjectMutation,
   shouldRetryLlamaOnCpu,
   privateAttachmentExternalDetail,
+  promptCharacterBudget,
   toolResultForModel,
 } from "../dist-electron/main/ai.js";
+
+test("the full configured context stays available while inference helpers reduce repeated work", () => {
+  assert.ok(promptCharacterBudget(262144, 4096) > 800_000);
+  const oversized = `system:${"a".repeat(1_100_000)}:recent`;
+  const fitted = fitPromptToContext(oversized, 262144, 4096);
+  assert.ok(fitted.length > 800_000);
+  assert.match(fitted, /^system:/);
+  assert.match(fitted, /:recent$/);
+  assert.deepEqual(kvCacheProfile(262144), { llama: "q8_0", mlxBits: 8 });
+  assert.deepEqual(kvCacheProfile(262144, "fast"), {
+    llama: "q4_0",
+    mlxBits: 4,
+  });
+  assert.deepEqual(llamaPerformanceArguments("--spec-type TYPE"), [
+    "--spec-type",
+    "ngram-simple",
+  ]);
+  const noisy = JSON.stringify({
+    stdout: "x\n".repeat(100_000),
+    stderr: "fatal: failed",
+  });
+  assert.ok(compactToolResultForModel("run_command", noisy).length < 70_000);
+});
 
 test("automatic Intel macOS inference can retry without Metal", () => {
   assert.equal(shouldRetryLlamaOnCpu("darwin", "x64", "auto"), true);
@@ -229,6 +257,16 @@ test("attachments are decoded locally and represented honestly for each engine",
     attachmentContextForModel([image], "ollama")[0],
     /pixels are supplied directly to the selected local model/,
   );
+  const staleCapabilityPrompt = attachmentContextForModel([image], "mlx", {
+    text: true,
+    documents: true,
+    images: false,
+    video: false,
+    audio: false,
+    mediaInput: false,
+  })[0];
+  assert.match(staleCapabilityPrompt, /Inspect the image itself/);
+  assert.doesNotMatch(staleCapabilityPrompt, /cannot receive image pixels/i);
   assert.equal(
     hasPrivateAttachmentContext([
       { role: "user", content: "Review it", attachments: [image] },
@@ -321,7 +359,10 @@ test("private multimodal files are short-lived and local runtimes receive media 
       mediaInput: false,
     },
   );
-  assert.deepEqual(textOnlyRouting[0].attachments, []);
+  assert.deepEqual(
+    textOnlyRouting[0].attachments.map((attachment) => attachment.kind),
+    ["image"],
+  );
   await media.cleanup();
   await assert.rejects(fs.stat(media.root), { code: "ENOENT" });
 

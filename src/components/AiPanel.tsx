@@ -4430,7 +4430,10 @@ export function AiPanel({
         )}
       </div>
       {!!attachments.length && (
-        <div className="ai-attachments" aria-label="Attached local files">
+        <div
+          className="ai-attachments"
+          aria-label="Attached media and documents"
+        >
           {attachments.map((attachment) => (
             <figure key={attachment.id}>
               {attachment.kind === "image" ? (
@@ -4457,6 +4460,17 @@ export function AiPanel({
               </button>
             </figure>
           ))}
+          {attachments.length < 6 && (
+            <button
+              type="button"
+              className="ai-attachment-add"
+              aria-label="Add another attachment"
+              title="Add another attachment"
+              onClick={() => attachmentInputRef.current?.click()}
+            >
+              <FeatherIcon icon="plus" size="16" />
+            </button>
+          )}
         </div>
       )}
       <form className="ai-composer" onSubmit={send}>

@@ -214,6 +214,11 @@ test("notifications are a real history panel and AI controls share the top bar",
   assert.match(app, /title: "Stopped"/);
   assert.match(app, /title: "Failed"/);
   assert.doesNotMatch(app, /osChat needs you/);
+  assert.match(
+    styles,
+    /\.oschat-app \.oschat-top-divider \{[\s\S]*?width: 1px;[\s\S]*?height: 24px;[\s\S]*?background: color-mix\(in srgb, var\(--muted\) 42%, transparent\)/,
+  );
+  assert.match(styles, /\.oschat-app \.oschat-top-actions \{[\s\S]*?gap: 2px;/);
 });
 
 test("chat and notes use separate functional in-app folder scopes", () => {
@@ -768,7 +773,7 @@ test("recent chats follow their latest saved activity", () => {
   );
 });
 
-test("completed answers collapse history and use the next reading size", () => {
+test("completed answers collapse history and use the shared 14px reading size", () => {
   assert.doesNotMatch(
     ai,
     /className="ai-(?:reasoning|response-actions)"\s+open=\{messageIndex/,
@@ -776,10 +781,72 @@ test("completed answers collapse history and use the next reading size", () => {
   assert.match(aiPanel, /className="ai-reasoning ai-live-reasoning" open/);
   assert.match(
     styles,
-    /Conversation reading scale and completed-answer hierarchy[\s\S]*font-size: 15px !important;/,
+    /Conversation reading scale and completed-answer hierarchy[\s\S]*font-size: 14px !important;/,
   );
   assert.match(
     styles,
     /\.chat-artifact-card > header b[\s\S]{0,100}color: var\(--accent\);[\s\S]{0,100}font-weight: 750;/,
+  );
+});
+
+test("ordinary UI copy follows the established New chat reference scale", () => {
+  assert.match(
+    styles,
+    /Everyday UI copy follows the established New chat label scale[\s\S]*?--oschat-ui-text-size: 14px;/,
+  );
+  assert.match(
+    styles,
+    /button:not\(\.icon-button\):not\(\.new-chat-button\)[\s\S]*?\.collection-browser > header[\s\S]*?font-size: var\(--oschat-ui-text-size\) !important;/,
+  );
+  assert.match(
+    styles,
+    /One 14px conversational baseline[\s\S]*?\.ai-composer textarea[\s\S]*?font-size: 14px !important;/,
+  );
+  assert.match(
+    styles,
+    /14px everyday UI contract[\s\S]*?\.new-chat-button,[\s\S]*?font-size: var\(--oschat-ui-text-size\) !important;/,
+  );
+  assert.match(styles, /\.new-chat-button > span \{[\s\S]*?font-size: 11px;/);
+  assert.match(
+    styles,
+    /Restore the compact navigation contract[\s\S]*?\.workspace-nav button[\s\S]*?font-size: 0 !important;/,
+  );
+});
+
+test("the 14px everyday UI contract covers chat, search, history, buttons, and menus", () => {
+  assert.match(
+    styles,
+    /14px everyday UI contract[\s\S]*?--oschat-ui-text-size: 14px;[\s\S]*?--oschat-ui-line-height: 1\.45;/,
+  );
+  assert.match(
+    styles,
+    /\.new-chat-button,[\s\S]*?\.workspace-nav button,[\s\S]*?\.sidebar-list article b,[\s\S]*?\.global-search input,[\s\S]*?\.ai-chat-tab > button:first-child > span,[\s\S]*?\.sidebar-item-menu button,[\s\S]*?\.ai-composer textarea,[\s\S]*?\.ai-message-content,[\s\S]*?font-size: var\(--oschat-ui-text-size\) !important;/,
+  );
+  assert.match(
+    styles,
+    /Permission search and action remain a real two-control row[\s\S]*?grid-template-columns: minmax\(220px, 1fr\) max-content;[\s\S]*?overflow: visible !important;/,
+  );
+  assert.match(
+    styles,
+    /\.ai-permission-popover \.ai-permission-tools > label > input[\s\S]*?font-size: var\(--oschat-ui-text-size\) !important;/,
+  );
+});
+
+test("pending media stays in a theme-aware scrollable attachment pill", () => {
+  assert.match(
+    aiPanel,
+    /className="ai-attachments"[\s\S]*?className="ai-attachment-add"[\s\S]*?Add another attachment/,
+  );
+  assert.match(
+    styles,
+    /Media attachment tray[\s\S]*?--oschat-attachment-tray:[\s\S]*?\.oschat-app\.blue-dark[\s\S]*?\.oschat-app\.blue-light/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-attachments \{[\s\S]*?overflow-x: auto;[\s\S]*?border-radius: 999px;[\s\S]*?background: var\(--oschat-attachment-tray\);/,
+  );
+  assert.match(
+    styles,
+    /\.oschat-app \.ai-attachments > \.ai-attachment-add \{[\s\S]*?position: relative;[\s\S]*?border-radius: 50%;/,
   );
 });
