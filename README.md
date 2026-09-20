@@ -34,7 +34,7 @@ osChat combines a familiar conversational interface with native document, spread
 
 - The models are derived from Qwen 3.8 Max and are rebuilt to be smaller.
 
-- Models in detail: https://github.com/OmerDesignX/osCode-Models
+- Models in detail: https://www.omerdesign.com/models
 
 ## Browse the Web
 
