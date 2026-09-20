@@ -23,6 +23,120 @@ type Variant = {
 export const modelRepository = "https://models.omerdesign.com/oscode-models";
 export const defaultModelRelease: ModelRelease = "v2";
 
+export function modelInstallDirectory(
+  modelsRoot: string,
+  variant: Variant,
+  release: ModelRelease,
+) {
+  return path.join(
+    modelsRoot,
+    release,
+    variant.runtime === "llamacpp" ? "gguf" : "mlx",
+    variant.folder,
+  );
+}
+
+export async function installedModelRelease(
+  directory: string,
+  runtime: CatalogRuntime,
+): Promise<ModelRelease> {
+  const marker = await fs
+    .readFile(path.join(directory, "OSCODE_MODEL.json"), "utf8")
+    .then((value) => JSON.parse(value) as { release?: unknown })
+    .catch(() => null);
+  if (marker?.release === "v2") return "v2";
+  const entries = await fs.readdir(directory).catch(() => [] as string[]);
+  const hasVisionFiles = entries.some((name) =>
+    runtime === "mlx"
+      ? /^model-vision-.*\.safetensors$/i.test(name)
+      : /(?:^|[-.])mmproj.*\.gguf$/i.test(name),
+  );
+  return hasVisionFiles ? "v2" : "v1";
+}
+
+export type ModelDirectoryMigration = { from: string; to: string };
+
+export async function migrateLegacyModelInstallations(
+  modelsRoot: string,
+): Promise<ModelDirectoryMigration[]> {
+  const moved: ModelDirectoryMigration[] = [];
+  for (const variant of modelVariants) {
+    const legacy = path.join(
+      modelsRoot,
+      variant.runtime === "llamacpp" ? "gguf" : "mlx",
+      variant.folder,
+    );
+    const source = await fs.lstat(legacy).catch(() => null);
+    if (!source?.isDirectory() || source.isSymbolicLink()) continue;
+    const release = await installedModelRelease(legacy, variant.runtime);
+    const destination = modelInstallDirectory(modelsRoot, variant, release);
+    if (await fs.lstat(destination).catch(() => null)) continue;
+    const releaseRoot = path.join(modelsRoot, release);
+    const releaseStat = await fs.lstat(releaseRoot).catch(() => null);
+    if (
+      releaseStat?.isSymbolicLink() ||
+      (releaseStat && !releaseStat.isDirectory())
+    )
+      throw new Error("The versioned model folder is unsafe");
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    // Rename within app data so upgrades preserve multi-gigabyte V1 files
+    // without requiring a second copy or replacing them with V2.
+    await fs.rename(legacy, destination);
+    moved.push({ from: legacy, to: destination });
+  }
+  return moved;
+}
+
+export function migratedModelSelection(
+  selected: string,
+  migrations: ModelDirectoryMigration[],
+) {
+  for (const migration of migrations) {
+    const relative = path.relative(migration.from, selected);
+    if (
+      relative === "" ||
+      (relative !== ".." &&
+        !relative.startsWith(".." + path.sep) &&
+        !path.isAbsolute(relative))
+    )
+      return path.join(migration.to, relative);
+  }
+  return selected;
+}
+
+export async function resolveVersionedModelSelection(
+  selected: string,
+  modelsRoots: string[],
+) {
+  if (!selected || (await fs.lstat(selected).catch(() => null)))
+    return selected;
+  for (const modelsRoot of modelsRoots) {
+    for (const variant of modelVariants) {
+      const legacy = path.join(
+        modelsRoot,
+        variant.runtime === "llamacpp" ? "gguf" : "mlx",
+        variant.folder,
+      );
+      const relative = path.relative(legacy, selected);
+      if (
+        relative === ".." ||
+        relative.startsWith(".." + path.sep) ||
+        path.isAbsolute(relative)
+      )
+        continue;
+      for (const release of ["v1", "v2"] as const) {
+        const candidate = path.join(
+          modelInstallDirectory(modelsRoot, variant, release),
+          relative,
+        );
+        const stat = await fs.lstat(candidate).catch(() => null);
+        if (stat && !stat.isSymbolicLink()) return candidate;
+      }
+    }
+  }
+  return selected;
+}
+
 // Published Content-Length values: reject truncated or silently replaced archives.
 const archiveBytes: Record<
   ModelRelease,
@@ -309,10 +423,10 @@ export async function downloadModelVariant(options: {
   const zipPath = path.join(staging, "model.zip");
   const unpacked = path.join(staging, "unpacked");
   const prepared = path.join(staging, "model");
-  const finalDirectory = path.join(
+  const finalDirectory = modelInstallDirectory(
     options.modelsRoot,
-    variant.runtime === "llamacpp" ? "gguf" : "mlx",
-    variant.folder,
+    variant,
+    release,
   );
   const previous = finalDirectory + ".previous-" + randomUUID();
   let movedPrevious = false;

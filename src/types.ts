@@ -72,6 +72,7 @@ export type AiModel = {
   path: string;
   source: "local" | "downloaded" | "available" | "ollama" | "bundled";
   tier?: AiModelTier;
+  release?: "v1" | "v2";
   bytes?: number;
   supported?: boolean;
   supportReason?: string;

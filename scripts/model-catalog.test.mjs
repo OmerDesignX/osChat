@@ -8,6 +8,10 @@ import {
   archiveForVariant,
   defaultModelRelease,
   filesForVariant,
+  migrateLegacyModelInstallations,
+  migratedModelSelection,
+  modelInstallDirectory,
+  resolveVersionedModelSelection,
   modelRepository,
   modelVariants,
   validateArchiveEntry,
@@ -17,6 +21,7 @@ import {
   defaultBuiltInContext,
   findGguf,
   findMlx,
+  bundledModels,
   localAiEngine,
   mlxRuntimeSupported,
 } from "../dist-electron/main/bundled-models.js";
@@ -166,6 +171,166 @@ test("V2 MLX is not ready until its indexed vision shard is present", async (t) 
     "vision weights",
   );
   assert.equal(await findMlx(directory, variant), model);
+});
+
+test("app upgrades move existing V1 and V2 installs into separate internal folders", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "model-upgrade-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const variants = [
+    modelVariants.find(
+      (item) => item.runtime === "mlx" && item.tier === "small",
+    ),
+    modelVariants.find(
+      (item) => item.runtime === "mlx" && item.tier === "medium",
+    ),
+    modelVariants.find(
+      (item) => item.runtime === "llamacpp" && item.tier === "small",
+    ),
+    modelVariants.find(
+      (item) => item.runtime === "llamacpp" && item.tier === "medium",
+    ),
+  ];
+  assert.ok(variants.every(Boolean));
+  for (const variant of variants) {
+    const release = variant.tier === "small" ? "v1" : "v2";
+    const legacy = path.join(
+      root,
+      variant.runtime === "mlx" ? "mlx" : "gguf",
+      variant.folder,
+    );
+    await fs.mkdir(legacy, { recursive: true });
+    if (variant.runtime === "mlx") {
+      for (const name of [
+        "config.json",
+        "chat_template.jinja",
+        "tokenizer.json",
+        "tokenizer_config.json",
+      ])
+        await fs.writeFile(path.join(legacy, name), "{}");
+      const weights = ["model-00001-of-00021.safetensors"];
+      if (release === "v2")
+        weights.push("model-vision-00001-of-00001.safetensors");
+      await fs.writeFile(
+        path.join(legacy, "model.safetensors.index.json"),
+        JSON.stringify({
+          weight_map: Object.fromEntries(
+            weights.map((file, index) => [`weight.${index}`, file]),
+          ),
+        }),
+      );
+      for (const file of weights)
+        await fs.writeFile(path.join(legacy, file), "weight");
+    } else {
+      await fs.writeFile(
+        path.join(legacy, path.basename(variant.repositoryPath)),
+        "model",
+      );
+      if (release === "v2")
+        await fs.writeFile(
+          path.join(legacy, "osCode-GGUF-Medium-mmproj-Q6_K.gguf"),
+          "projector",
+        );
+    }
+  }
+  const oldMlx = path.join(root, "mlx", variants[0].folder);
+  const oldGguf = path.join(
+    root,
+    "gguf",
+    "small",
+    path.basename(variants[2].repositoryPath),
+  );
+  const moves = await migrateLegacyModelInstallations(root);
+  assert.equal(moves.length, 4);
+  assert.equal(
+    await migrateLegacyModelInstallations(root).then((items) => items.length),
+    0,
+  );
+  for (const variant of variants) {
+    const release = variant.tier === "small" ? "v1" : "v2";
+    const destination = modelInstallDirectory(root, variant, release);
+    assert.equal((await fs.stat(destination)).isDirectory(), true);
+  }
+  assert.equal(
+    migratedModelSelection(oldMlx, moves),
+    modelInstallDirectory(root, variants[0], "v1"),
+  );
+  assert.equal(
+    await resolveVersionedModelSelection(oldMlx, [
+      path.join(root, "other"),
+      root,
+    ]),
+    modelInstallDirectory(root, variants[0], "v1"),
+  );
+  assert.equal(
+    migratedModelSelection(oldGguf, moves),
+    path.join(
+      modelInstallDirectory(root, variants[2], "v1"),
+      path.basename(oldGguf),
+    ),
+  );
+  assert.equal(
+    await resolveVersionedModelSelection(oldGguf, [root]),
+    path.join(
+      modelInstallDirectory(root, variants[2], "v1"),
+      path.basename(oldGguf),
+    ),
+  );
+  const models = await bundledModels(root);
+  const runtime = localAiEngine();
+  assert.ok(
+    models.some(
+      (item) =>
+        item.engine === runtime &&
+        item.tier === "small" &&
+        item.release === "v1" &&
+        item.installed,
+    ),
+  );
+  assert.ok(
+    models.some(
+      (item) =>
+        item.engine === runtime &&
+        item.tier === "medium" &&
+        item.release === "v2" &&
+        item.installed,
+    ),
+  );
+  assert.ok(
+    models.some(
+      (item) =>
+        item.engine === runtime &&
+        item.tier === "small" &&
+        item.release === "v2" &&
+        !item.installed,
+    ),
+  );
+});
+
+test("upgrade never overwrites an existing versioned model", async (t) => {
+  const root = await fs.mkdtemp(
+    path.join(os.tmpdir(), "model-upgrade-collision-"),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const variant = modelVariants.find(
+    (item) => item.runtime === "mlx" && item.tier === "small",
+  );
+  assert.ok(variant);
+  const legacy = path.join(root, "mlx", variant.folder);
+  const destination = modelInstallDirectory(root, variant, "v1");
+  await fs.mkdir(legacy, { recursive: true });
+  await fs.mkdir(destination, { recursive: true });
+  await fs.writeFile(path.join(legacy, "legacy.txt"), "keep this");
+  await fs.writeFile(path.join(destination, "installed.txt"), "keep this too");
+  assert.deepEqual(await migrateLegacyModelInstallations(root), []);
+  assert.equal(await resolveVersionedModelSelection(legacy, [root]), legacy);
+  assert.equal(
+    await fs.readFile(path.join(legacy, "legacy.txt"), "utf8"),
+    "keep this",
+  );
+  assert.equal(
+    await fs.readFile(path.join(destination, "installed.txt"), "utf8"),
+    "keep this too",
+  );
 });
 
 test("each tier downloads only its own complete shard set", () => {

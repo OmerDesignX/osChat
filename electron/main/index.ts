@@ -36,6 +36,11 @@ import type {
   TreeEntry,
 } from "../types.js";
 import { LocalAiService } from "./ai.js";
+import {
+  migrateLegacyModelInstallations,
+  migratedModelSelection,
+  resolveVersionedModelSelection,
+} from "./model-catalog.js";
 import { AgentControlService } from "./agent-control.js";
 import { parseGitStatus, parseTracking } from "./git-status.js";
 import { PlatformioService } from "./platformio.js";
@@ -1170,7 +1175,7 @@ const secureStatePath = (name: string) =>
 const legacyStatePath = (name: string) =>
   path.join(app.getPath("userData"), `${name}.json`);
 async function readPreferences() {
-  return validPreferences(
+  const preferences = validPreferences(
     await secureStore.readJson(
       secureStatePath("preferences"),
       defaultPreferences,
@@ -1178,6 +1183,13 @@ async function readPreferences() {
       legacyStatePath("preferences"),
     ),
   );
+  const userData = app.getPath("userData");
+  const selected = await resolveVersionedModelSelection(preferences.aiModel, [
+    path.join(userData, "models"),
+    path.join(path.dirname(userData), "oscode", "models"),
+  ]);
+  if (selected === preferences.aiModel) return preferences;
+  return writePreferences({ ...preferences, aiModel: selected });
 }
 async function writePreferences(value: unknown) {
   const preferences = validPreferences(value);
@@ -5428,6 +5440,19 @@ if (ownsSingleInstance)
       );
       app.quit();
       return;
+    }
+    try {
+      const moved = await migrateLegacyModelInstallations(
+        path.join(userData, "models"),
+      );
+      if (moved.length) {
+        const preferences = await readPreferences();
+        const selected = migratedModelSelection(preferences.aiModel, moved);
+        if (selected !== preferences.aiModel)
+          await writePreferences({ ...preferences, aiModel: selected });
+      }
+    } catch (error) {
+      console.warn("Existing model migration was deferred:", error);
     }
     appUpdateService = new AppUpdateService(
       (status) => sendToRenderer("updates:status-changed", status),

@@ -2062,6 +2062,29 @@ function SettingsDialog(props: SettingsProps) {
                   })}
                 </div>
               </SettingGroup>
+              {props.models.some(
+                (model) => model.release === "v1" && model.installed,
+              ) && (
+                <SettingGroup
+                  title="Existing V1 models"
+                  description="Preserved in a separate app-data folder. Choose them from the chat model menu."
+                >
+                  <div className="settings-model-list">
+                    {props.models
+                      .filter(
+                        (model) => model.release === "v1" && model.installed,
+                      )
+                      .map((model) => (
+                        <article key={model.id}>
+                          <span>
+                            <b>{model.name}</b>
+                            <small>{model.engine} · preserved locally</small>
+                          </span>
+                        </article>
+                      ))}
+                  </div>
+                </SettingGroup>
+              )}
               <SettingGroup
                 title="Custom local models"
                 description="Add GGUF, MLX, PyTorch, or Ollama models without uploading them."

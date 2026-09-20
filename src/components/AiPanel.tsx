@@ -2285,8 +2285,14 @@ export function AiPanel({
   const selectBundledTier = async (tier: Exclude<AiModelTier, "custom">) => {
     const selected =
       tierModels.find(
-        (item) => osCodeGgufTier(item) === tier && item.supported !== false,
-      ) || tierModels.find((item) => osCodeGgufTier(item) === tier);
+        (item) =>
+          item.release === "v2" &&
+          osCodeGgufTier(item) === tier &&
+          item.supported !== false,
+      ) ||
+      tierModels.find(
+        (item) => item.release === "v2" && osCodeGgufTier(item) === tier,
+      );
     if (!selected || selected.supported === false) return;
     if (selected.installed === false || selected.source === "available") {
       setDownloadingTier(tier);
@@ -2427,8 +2433,13 @@ export function AiPanel({
         const item =
           tierModels.find(
             (entry) =>
-              osCodeGgufTier(entry) === tier && entry.supported !== false,
-          ) || tierModels.find((entry) => osCodeGgufTier(entry) === tier);
+              entry.release === "v2" &&
+              osCodeGgufTier(entry) === tier &&
+              entry.supported !== false,
+          ) ||
+          tierModels.find(
+            (entry) => entry.release === "v2" && osCodeGgufTier(entry) === tier,
+          );
         return (
           <button
             key={tier}
@@ -2459,6 +2470,31 @@ export function AiPanel({
           </button>
         );
       })}
+      {tierModels.some((item) => item.release === "v1" && item.installed) && (
+        <div className="ai-tier-picker-section">Your existing V1 models</div>
+      )}
+      {tierModels
+        .filter((item) => item.release === "v1" && item.installed)
+        .map((item) => (
+          <button
+            key={item.id}
+            className={item.path === model ? "active" : ""}
+            disabled={
+              item.supported === false || Boolean(downloadingTier) || busy
+            }
+            title={item.supportReason || item.name}
+            onClick={() => {
+              onEngine(item.engine);
+              onModel(item.path);
+              onContextLimit(recommendedActiveContext(item, hardware));
+              setStatus(`${item.name} selected`);
+              setTierPickerOpen(false);
+            }}
+          >
+            <b>{item.tier} V1</b>
+            <span>Installed</span>
+          </button>
+        ))}
       <button
         className={
           selectedModel && osCodeGgufTier(selectedModel) === null

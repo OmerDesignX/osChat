@@ -4,7 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { AiHardwareProfile, AiModel, AiModelTier } from "../types.js";
-import { modelVariants } from "./model-catalog.js";
+import { installedModelRelease, modelVariants } from "./model-catalog.js";
 
 const exec = promisify(execFile);
 const tiers: Array<Exclude<AiModelTier, "custom">> = [
@@ -190,49 +190,68 @@ export async function bundledModels(
       (item) => item.runtime === engine && item.tier === tier,
     );
     if (!catalog) continue;
-    let installedPath = "";
-    let installedFromOwnRoot = false;
-    for (const [index, root] of roots.entries()) {
-      installedPath =
-        engine === "llamacpp"
-          ? await findGguf(path.join(root, "gguf"), tier)
-          : await findMlx(path.join(root, "mlx"), catalog);
-      if (installedPath) {
-        installedFromOwnRoot = index === 0;
-        break;
+    for (const release of ["v2", "v1"] as const) {
+      let installedPath = "";
+      let installedFromOwnRoot = false;
+      for (const [index, root] of roots.entries()) {
+        const runtimeFolder = engine === "llamacpp" ? "gguf" : "mlx";
+        const versioned = path.join(root, release, runtimeFolder);
+        installedPath =
+          engine === "llamacpp"
+            ? await findGguf(path.join(versioned, tier), tier)
+            : await findMlx(versioned, catalog);
+        if (!installedPath) {
+          const legacy = path.join(root, runtimeFolder, catalog.folder);
+          const legacyStat = await fs.lstat(legacy).catch(() => null);
+          if (
+            legacyStat?.isDirectory() &&
+            !legacyStat.isSymbolicLink() &&
+            (await installedModelRelease(legacy, engine)) === release
+          )
+            installedPath =
+              engine === "llamacpp"
+                ? await findGguf(legacy, tier)
+                : await findMlx(path.join(root, runtimeFolder), catalog);
+        }
+        if (installedPath) {
+          installedFromOwnRoot = index === 0;
+          break;
+        }
       }
-    }
-    const bytes = installedPath
-      ? engine === "llamacpp"
-        ? await directoryBytes(path.dirname(installedPath))
-        : await directoryBytes(installedPath)
-      : catalog.bytes;
-    const supported = memoryBytes >= requiredMemory(tier, bytes);
-    const installed = Boolean(installedPath);
-    results.push({
-      id: `oscode:${engine}:${tier}`,
-      name: `osChat ${tier[0].toUpperCase()}${tier.slice(1)}`,
-      engine,
-      path: installedPath || `catalog:${engine}:${tier}`,
-      source: installed
-        ? installedFromOwnRoot
-          ? "downloaded"
-          : "bundled"
-        : "available",
-      tier,
-      bytes: installed ? bytes : undefined,
-      downloadBytes: catalog.bytes,
-      installed,
-      supported,
-      contextLimit: osCodeContextLimit,
-      preferredContext: defaultBuiltInContext(engine),
-      supportReason: supported
-        ? undefined
-        : `Needs about ${Math.ceil(requiredMemory(tier, bytes) / 1024 ** 3)} GB memory`,
-    });
-    if (installed && engine === "mlx") {
-      results.at(-1)!.contextLimit = await mlxContextLimit(installedPath);
-      results.at(-1)!.preferredContext = results.at(-1)!.contextLimit;
+      if (release === "v1" && !installedPath) continue;
+      const bytes = installedPath
+        ? engine === "llamacpp"
+          ? await directoryBytes(path.dirname(installedPath))
+          : await directoryBytes(installedPath)
+        : catalog.bytes;
+      const supported = memoryBytes >= requiredMemory(tier, bytes);
+      const installed = Boolean(installedPath);
+      results.push({
+        id: `oscode:${engine}:${tier}${release === "v1" ? ":v1" : ""}`,
+        name: `osChat ${tier[0].toUpperCase()}${tier.slice(1)}${release === "v1" ? " V1" : ""}`,
+        engine,
+        path: installedPath || `catalog:${engine}:${tier}`,
+        source: installed
+          ? installedFromOwnRoot
+            ? "downloaded"
+            : "bundled"
+          : "available",
+        tier,
+        release,
+        bytes: installed ? bytes : undefined,
+        downloadBytes: release === "v2" ? catalog.bytes : undefined,
+        installed,
+        supported,
+        contextLimit: osCodeContextLimit,
+        preferredContext: defaultBuiltInContext(engine),
+        supportReason: supported
+          ? undefined
+          : `Needs about ${Math.ceil(requiredMemory(tier, bytes) / 1024 ** 3)} GB memory`,
+      });
+      if (installed && engine === "mlx") {
+        results.at(-1)!.contextLimit = await mlxContextLimit(installedPath);
+        results.at(-1)!.preferredContext = results.at(-1)!.contextLimit;
+      }
     }
   }
   return results;

@@ -584,6 +584,7 @@ test("project image delivery obligations are narrow and count requested assets",
   );
 });
 import {
+  archiveFilesForVariant,
   filesForVariant,
   modelVariants,
 } from "../dist-electron/main/model-catalog.js";
@@ -3836,6 +3837,70 @@ test("downloaded osCode tiers can be deleted without touching custom models", as
       .then(() => true)
       .catch(() => false),
     false,
+  );
+});
+
+test("deleting an installed V2 model leaves the preserved V1 model intact", async (t) => {
+  const { root, base, service } = await fixture();
+  t.after(() => fs.rm(base, { recursive: true, force: true }));
+  const runtime = localAiEngine();
+  const variant = modelVariants.find(
+    (item) => item.runtime === runtime && item.tier === "small",
+  );
+  assert.ok(variant);
+  const runtimeFolder = runtime === "mlx" ? "mlx" : "gguf";
+  for (const release of ["v1", "v2"]) {
+    const directory = path.join(
+      root,
+      "models",
+      release,
+      runtimeFolder,
+      variant.folder,
+    );
+    await fs.mkdir(directory, { recursive: true });
+    const files = archiveFilesForVariant(variant, release);
+    const weights = files.filter((name) => name.endsWith(".safetensors"));
+    for (const file of files) {
+      const name = path.basename(file);
+      await fs.writeFile(
+        path.join(directory, name),
+        name === "model.safetensors.index.json"
+          ? JSON.stringify({
+              weight_map: Object.fromEntries(
+                weights.map((weight, index) => [
+                  `weight.${index}`,
+                  path.basename(weight),
+                ]),
+              ),
+            })
+          : "test model",
+      );
+    }
+  }
+  const before = await service.listModels();
+  const v1 = before.find(
+    (item) => item.release === "v1" && item.tier === "small",
+  );
+  const v2 = before.find(
+    (item) => item.release === "v2" && item.tier === "small",
+  );
+  assert.ok(v1?.installed);
+  assert.ok(v2?.installed);
+  await service.removeModel(v2.id);
+  const v1Directory = runtime === "mlx" ? v1.path : path.dirname(v1.path);
+  const v2Directory = runtime === "mlx" ? v2.path : path.dirname(v2.path);
+  assert.equal((await fs.stat(v1Directory)).isDirectory(), true);
+  assert.equal(
+    await fs
+      .stat(v2Directory)
+      .then(() => true)
+      .catch(() => false),
+    false,
+  );
+  assert.ok(
+    (await service.listModels()).some(
+      (item) => item.id === v1.id && item.installed,
+    ),
   );
 });
 

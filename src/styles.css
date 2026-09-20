@@ -13290,6 +13290,15 @@ button > svg * {
   }
 }
 
+.ai-tier-picker-section {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  padding: 10px 4px 2px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+}
+
 /* Top-bar action grouping ---------------------------------------------------
    Keep Notifications visually separate from the AI options while preserving
    the compact circular controls used throughout osChat. */
