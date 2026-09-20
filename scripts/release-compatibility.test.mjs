@@ -57,10 +57,8 @@ test("brand assets use the baby-blue palette and a production icon", () => {
   assert.equal(macIcon.subarray(0, 4).toString("ascii"), "icns");
   assert.match(read("scripts/update-app-icons.sh"), /CORNER_RATIO="0\.2185"/);
   assert.match(read("releaseScripts/macos/prepare-icon.sh"), /icon_512x512@2x/);
-  assert.match(read("src/App.tsx"), /Search chats and workspaces/);
-  assert.match(read("src/App.tsx"), /Documents/);
-  assert.match(read("src/App.tsx"), /Spreadsheets/);
-  assert.match(read("src/App.tsx"), /Presentations/);
+  assert.match(read("src/App.tsx"), /Search chats/);
+  assert.doesNotMatch(read("src/App.tsx"), /notes-kind-nav/);
 });
 
 test("native releases package local inference runtimes without model weights or a server", () => {

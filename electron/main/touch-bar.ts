@@ -6,7 +6,6 @@ import {
 } from "electron";
 
 type OsChatTouchBarState = {
-  section: "chats" | "notes";
   busy: boolean;
   canAttach: boolean;
   canSend: boolean;
@@ -51,7 +50,6 @@ export function installOsChatTouchBar(
   if (process.platform !== "darwin") return null;
 
   let state: OsChatTouchBarState = {
-    section: "chats",
     busy: false,
     canAttach: false,
     canSend: false,
@@ -64,10 +62,6 @@ export function installOsChatTouchBar(
   const icons = {
     newChat: touchBarIcon("NSTouchBarComposeTemplate"),
     chats: touchBarIcon("NSTouchBarListViewTemplate"),
-    notes: touchBarIcon("NSTouchBarBookmarksTemplate"),
-    document: touchBarIcon("NSTouchBarAddDetailTemplate"),
-    spreadsheet: touchBarIcon("NSTouchBarIconViewTemplate"),
-    presentation: touchBarIcon("NSTouchBarQuickLookTemplate"),
     attach: touchBarIcon("NSTouchBarDownloadTemplate"),
     send: touchBarIcon("NSTouchBarGoUpTemplate"),
     stop: touchBarIcon("NSTouchBarRecordStopTemplate"),
@@ -106,30 +100,6 @@ export function installOsChatTouchBar(
         enabled: true,
       },
       {
-        label: "Notes",
-        icon: icons.notes,
-        action: "show-notes",
-        enabled: true,
-      },
-      {
-        label: "Document",
-        icon: icons.document,
-        action: "new-document",
-        enabled: true,
-      },
-      {
-        label: "Sheet",
-        icon: icons.spreadsheet,
-        action: "new-spreadsheet",
-        enabled: true,
-      },
-      {
-        label: "Slides",
-        icon: icons.presentation,
-        action: "new-presentation",
-        enabled: true,
-      },
-      {
         label: "Attach",
         icon: icons.attach,
         action: "chat-attach",
@@ -157,11 +127,6 @@ export function installOsChatTouchBar(
       if (!rawState || typeof rawState !== "object") return;
       const source = rawState as Record<string, unknown>;
       state = {
-        section: Object.hasOwn(source, "section")
-          ? source.section === "notes"
-            ? "notes"
-            : "chats"
-          : state.section,
         busy: mergedBoolean(source, "busy", state.busy),
         canAttach: mergedBoolean(source, "canAttach", state.canAttach),
         canSend: mergedBoolean(source, "canSend", state.canSend),

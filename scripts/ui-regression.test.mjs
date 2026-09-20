@@ -11,7 +11,6 @@ const aiPanel = read("src/components/AiPanel.tsx");
 const aiMessage = read("src/components/AiMessageContent.tsx");
 const miniWidget = read("src/components/MiniWidget.tsx");
 const miniWidgetModel = read("src/lib/mini-widget.ts");
-const productivity = read("src/components/ProductivityWorkspaceV2.tsx");
 const main = read("electron/main/index.ts");
 const preload = read("electron/preload/index.cts");
 const ai = read("electron/main/ai.ts");
@@ -105,14 +104,14 @@ test("osChat uses a chat-first shell with familiar left navigation", () => {
     app,
     /className="new-chat-button"[\s\S]{0,420}className="sidebar-divider new-chat-divider"[\s\S]{0,120}<nav className="workspace-nav"/,
   );
-  assert.match(app, /Search chats and workspaces/);
+  assert.match(app, /Search chats/);
   assert.match(app, /Recent chats/);
   assert.doesNotMatch(
     app,
     /<span>Recent chats<\/span>[\s\S]{0,220}aria-label="New chat"/,
   );
-  assert.match(app, />\s*Notes\s*</);
-  assert.match(app, /notes-kind-nav/);
+  assert.doesNotMatch(app, />\s*Notes\s*</);
+  assert.doesNotMatch(app, /notes-kind-nav/);
   assert.match(app, /OsChatWordmark/);
   assert.match(app, /mac-titlebar-safe-area/);
   assert.match(app, /data-oschat-ready="true"/);
@@ -122,24 +121,7 @@ test("osChat uses a chat-first shell with familiar left navigation", () => {
   );
 });
 
-test("documents, spreadsheets, and presentations are first-class workspaces", () => {
-  assert.match(app, /document: "Documents"/);
-  assert.match(app, /spreadsheet: "Spreadsheets"/);
-  assert.match(app, /presentation: "Presentations"/);
-  assert.match(productivity, /function DocumentEditor/);
-  assert.match(productivity, /function SpreadsheetEditor/);
-  assert.match(productivity, /function PresentationEditor/);
-  assert.match(productivity, /className="export-menu"/);
-  assert.match(productivity, /Word document \(\.docx\)/);
-  assert.match(productivity, /Workbook \(\.xlsx\)/);
-  assert.match(productivity, /Presentation \(\.pptx\)/);
-  assert.match(productivity, /=SUM\(A1:A8\)/);
-  assert.match(productivity, /Speaker notes/);
-  assert.match(productivity, /Present/);
-});
-
-test("productivity workspaces autosave and expose organized item metadata", () => {
-  assert.match(productivity, /All changes saved automatically/);
+test("chat collections expose organized item metadata", () => {
   assert.match(chatCollectionActions, /updateAiChatMetadata/);
   assert.match(chatCollectionActions, /deleteAiChat/);
   assert.match(app, /favorite/);
@@ -160,37 +142,6 @@ test("productivity workspaces autosave and expose organized item metadata", () =
   assert.match(app, /Move to\s+folder/);
   assert.match(app, /createPortal/);
   assert.match(styles, /sidebar-item-menu-portal/);
-});
-
-test("document, sheet, and presentation controls use organized ribbons", () => {
-  assert.match(productivity, /const RibbonTabs/);
-  assert.match(productivity, /label="Document tools"/);
-  assert.match(productivity, /label="Spreadsheet tools"/);
-  assert.match(productivity, /label="Presentation tools"/);
-  assert.match(productivity, /className="toolbar-row horizontal-menu-scroll"/);
-  assert.match(styles, /\.productivity-ribbon-tabs/);
-  assert.match(styles, /\.productivity-toolbar\.ribbon-toolbar/);
-});
-
-test("presentations support draggable slides and editable visual objects", () => {
-  assert.match(productivity, /draggable/);
-  assert.match(productivity, /dataTransfer\.setData\("text\/slide-id"/);
-  assert.match(productivity, /beginDrag/);
-  assert.match(productivity, /Text box/);
-  assert.match(productivity, /Rectangle/);
-  assert.match(productivity, /Circle/);
-  assert.match(productivity, /Line/);
-  assert.match(productivity, /Choose an image/);
-  assert.match(productivity, /readAsDataURL/);
-  assert.match(productivity, /beginResize/);
-  assert.match(productivity, /slide-resize-handle/);
-  assert.match(productivity, /Bring to front/);
-  assert.match(productivity, /Copy slide/);
-  assert.match(productivity, /Paste slide/);
-  assert.match(productivity, /Move earlier/);
-  assert.match(productivity, /Move later/);
-  assert.match(main, /deck\.ShapeType\.ellipse/);
-  assert.match(main, /slide\.addImage/);
 });
 
 test("notifications are a real history panel and AI controls share the top bar", () => {
@@ -221,11 +172,11 @@ test("notifications are a real history panel and AI controls share the top bar",
   assert.match(styles, /\.oschat-app \.oschat-top-actions \{[\s\S]*?gap: 2px;/);
 });
 
-test("chat and notes use separate functional in-app folder scopes", () => {
-  assert.match(app, /type FolderScope = "chat" \| "notes"/);
+test("chat folders migrate without exposing Notes", () => {
+  assert.match(app, /oschat-chat-folders-v3/);
   assert.match(app, /oschat-folder-scopes-v2/);
-  assert.match(app, /folderScope: FolderScope = view === "chat"/);
-  assert.match(app, /savedFolderScopes\[folderScope\]/);
+  assert.match(app, /cleanFolderList\(stored\.chat\)/);
+  assert.doesNotMatch(app, /savedFolderScopes\[folderScope\]/);
   assert.match(app, /className="folder-create-form"/);
   assert.match(app, /onSubmit=\{createFolder\}/);
   assert.doesNotMatch(app, /globalThis\.prompt\("New folder name"/);
@@ -372,7 +323,7 @@ test("native productivity exports use DOCX, XLSX, and PPTX libraries", () => {
   assert.match(main, /deck\.writeFile/);
 });
 
-test("the same AI collaborator powers chat and productivity without developer terminal chrome", () => {
+test("the chat collaborator remains mounted without developer terminal chrome", () => {
   assert.match(app, /const sharedAi = \(/);
   assert.match(app, /key="oschat-shared-ai"/);
   assert.match(app, /workspaceMode/);
@@ -425,7 +376,7 @@ test("model settings preserve verified tiers and custom local runtimes", () => {
 });
 
 test("permissions remain visible, scoped, and available above the composer", () => {
-  assert.match(app, /Files and artifacts/);
+  assert.match(app, /Workspace files/);
   assert.match(app, /Public web research/);
   assert.match(app, /Agent browser/);
   assert.match(app, /Computer Control/);
@@ -447,7 +398,7 @@ test("permissions remain visible, scoped, and available above the composer", () 
   assert.match(aiPanel, /grantAiPermission/);
 });
 
-test("chat can render inert interactive artifacts and opens editable workspaces", () => {
+test("chat can render inert interactive cards and copy or download them", () => {
   assert.match(aiMessage, /oschat-\(\?:artifact\|widget\)/);
   assert.match(aiMessage, /ChatArtifactPayload/);
   assert.match(aiMessage, /chat-artifact-table-wrap/);
@@ -460,10 +411,10 @@ test("chat can render inert interactive artifacts and opens editable workspaces"
   assert.match(aiMessage, /ai-web-link-icon/);
   assert.match(aiMessage, /referrerpolicy/);
   assert.match(aiMessage, /document\.querySelectorAll\("table"\)/);
-  assert.match(aiMessage, /Open workspace/);
+  assert.doesNotMatch(app, /onOpenArtifact=/);
   assert.match(aiMessage, /DOMPurify\.sanitize/);
   assert.match(aiMessage, /FORBID_TAGS/);
-  assert.match(aiMessage, /window\.oscode\.openExternalUrl/);
+  assert.match(aiMessage, /window\.oscode[\s\S]{0,40}\.openExternalUrl/);
   assert.match(aiMessage, /copyChatOutput/);
   assert.match(aiMessage, /downloadChatOutput/);
   assert.match(aiMessage, /artifactOutput/);
@@ -473,7 +424,7 @@ test("chat can render inert interactive artifacts and opens editable workspaces"
   assert.match(aiMessage, /ai-code-output/);
   assert.match(main, /chat-output:copy/);
   assert.match(main, /chat-output:download/);
-  assert.match(app, /onOpenArtifact/);
+  assert.doesNotMatch(app, /onOpenArtifact/);
 });
 
 test("the agent can render safe interactive mini GUIs without executable code", () => {
@@ -534,20 +485,23 @@ test("Qwen answers and document widgets use restrained semantic typography", () 
   );
 });
 
-test("the local agent prompt understands osChat artifacts and still acts through tools", () => {
+test("the local agent prompt keeps cards in chat and still acts through tools", () => {
   assert.match(ai, /You are osChat's private local agentic assistant/);
   assert.match(ai, /APP IDENTITY \(highest priority\)/);
   assert.match(ai, /Never call yourself osCode/);
-  assert.match(ai, /PRODUCTIVITY WORKSPACES/);
+  assert.match(ai, /OSCHAT WORKSPACE/);
   assert.match(ai, /\.oschat\.json/);
   assert.match(ai, /INTERACTIVE CHAT/);
   assert.match(ai, /INTERACTIVE CHAT COMPLETION CONTRACT/);
-  assert.match(ai, /every substantive answer MUST include exactly one/);
+  assert.match(
+    ai,
+    /substantive answers should include an immediately renderable in-chat view when it genuinely helps/,
+  );
   assert.match(ai, /MINI WIDGETS/);
   assert.match(ai, /Never emit HTML, CSS, scripts, event handlers/);
   assert.match(ai, /GENERATED APP COMPLETION/);
   assert.match(ai, /inspect the resulting view after every click/);
-  assert.match(ai, /Saving an \.oschat\.json file is internal persistence/);
+  assert.match(ai, /Do not create \.oschat\.json note records/);
   assert.match(ai, /Interactive-output correction/);
   assert.match(ai, /hasRenderableInteractiveContent/);
   assert.match(ai, /fallbackInteractiveContent/);
@@ -580,8 +534,6 @@ test("mini-widget actions use consistent padded pill controls", () => {
 test("responsive layouts scroll dense horizontal menus rather than crushing controls", () => {
   assert.match(app, /data-horizontal-menu/);
   assert.match(app, /scrollHorizontalMenu/);
-  assert.match(productivity, /horizontal-menu-scroll/);
-  assert.match(styles, /\.productivity-toolbar[\s\S]*overflow-x: auto/);
   assert.match(styles, /@media \(max-width: 860px\)/);
   assert.match(styles, /@media \(max-width: 660px\)/);
   assert.match(aiPanel, /conversation\.scrollTo/);

@@ -11,22 +11,16 @@
 </p>
 
 <p align="center">
-  <a href="assets/screenshots/0002.png">
-    <img src="assets/screenshots/0002.png" alt="osChat document, spreadsheet, and presentation workspaces" width="100%">
-  </a>
-</p>
-
-<p align="center">
   <a href="assets/screenshots/0003.png">
     <img src="assets/screenshots/0003.png" alt="osChat local model and agent controls" width="100%">
   </a>
 </p>
 
-<p align="center">A private, local-first AI chat and productivity workspace.</p>
+<p align="center">A private, local-first AI chat workspace.</p>
 
 osChat is allows you to run local Ai models and agents. osChat features osCode Models derived from Qwen 3.8 Max and come in Small, Medium, and Large. Small can fit on most devices with 8 GB of RAM. No data is sent to the cloud and all processing done on-device.
 
-osChat combines a familiar conversational interface with native document, spreadsheet, and presentation workspaces. Its local agent can research public information, create and revise files, build interactive response widgets, and collaborate beside each editor without requiring a cloud account.
+osChat combines a familiar conversational interface with a local agent that can research public information, create and revise files, and build interactive response widgets without requiring a cloud account.
 
 ## osCode Models
 
@@ -39,10 +33,6 @@ osChat combines a familiar conversational interface with native document, spread
 ## Browse the Web
 
 - The Ai Agent can browse the web and fetch new information. It also has its own in-built browser.
-
-## Notes: Documents, Spreadsheets, and Presentations
-
-- There are in-built Document, Spreadsheet, and Presentation editors. Take notes yourself or get you Ai agent to help,
 
 ## Privacy in your controls / Ai Agent Security
 

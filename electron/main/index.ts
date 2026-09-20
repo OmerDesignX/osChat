@@ -50,7 +50,8 @@ import { AppUpdateService } from "./updater.js";
 import { installOsChatTouchBar, type TouchBarController } from "./touch-bar.js";
 import { SaveHistoryStore } from "./save-history.js";
 import { McpClientService } from "./mcp-client.js";
-import { assertReceiveOnlyPublicUrl } from "./outbound-guard.js";
+import { assertUserOpenedHttpUrl } from "./outbound-guard.js";
+import { textContextMenuItems } from "./text-context-menu.js";
 import { fetchPublicSiteIcon } from "./web-search.js";
 import {
   appLocalKeyProtector,
@@ -1648,35 +1649,101 @@ function createWindow(show = true, restoreLastProject = true) {
     }
   });
   window.webContents.on("context-menu", (_event, params) => {
-    if (!spellcheckEnabled || !params.misspelledWord) return;
-    const word = params.misspelledWord;
-    const suggestions = params.dictionarySuggestions.slice(0, 8);
-    const template: MenuItemConstructorOptions[] = suggestions.map(
-      (suggestion) => ({
-        label: suggestion,
-        click: () => window.webContents.replaceMisspelling(suggestion),
-      }),
-    );
-    if (!suggestions.length)
-      template.push({ label: "No suggestions", enabled: false });
-    template.push(
-      { type: "separator" },
-      {
-        label: "Replace all",
-        enabled: suggestions.length > 0,
-        submenu: suggestions.map((suggestion) => ({
-          label: suggestion,
+    const template: MenuItemConstructorOptions[] = [];
+    const append = (items: MenuItemConstructorOptions[]) => {
+      if (!items.length) return;
+      if (template.length) template.push({ type: "separator" });
+      template.push(...items);
+    };
+    let link = "";
+    try {
+      if (params.linkURL) link = assertUserOpenedHttpUrl(params.linkURL);
+    } catch {
+      // Never offer navigation to file:, script:, or credentialed URLs.
+    }
+    if (link)
+      append([
+        {
+          label: "Open Link",
+          click: () => {
+            void shell
+              .openExternal(link, { activate: true })
+              .catch(() => dialog.showErrorBox("Couldn’t open link", link));
+          },
+        },
+        { label: "Copy Link Address", click: () => clipboard.writeText(link) },
+      ]);
+    if (
+      params.mediaType === "image" &&
+      params.srcURL.startsWith("data:image/")
+    ) {
+      const image = nativeImage.createFromDataURL(params.srcURL);
+      if (!image.isEmpty()) {
+        const imageName =
+          (params.titleText || "osChat image")
+            .replace(/\.[a-z0-9]{2,5}$/i, "")
+            .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+            .trim()
+            .slice(0, 80) || "osChat image";
+        append([
+          { label: "Copy Image", click: () => clipboard.writeImage(image) },
+          {
+            label: "Save Image As…",
+            click: () => {
+              void dialog
+                .showSaveDialog(window, {
+                  title: "Save image",
+                  defaultPath: imageName + ".png",
+                  filters: [{ name: "PNG image", extensions: ["png"] }],
+                })
+                .then(async ({ canceled, filePath }) => {
+                  if (!canceled && filePath)
+                    await fs.writeFile(filePath, image.toPNG());
+                })
+                .catch((error: unknown) =>
+                  dialog.showErrorBox(
+                    "Couldn’t save image",
+                    error instanceof Error ? error.message : String(error),
+                  ),
+                );
+            },
+          },
+        ]);
+      }
+    }
+    if (spellcheckEnabled && params.misspelledWord) {
+      const word = params.misspelledWord;
+      const suggestions = params.dictionarySuggestions.slice(0, 8);
+      append([
+        ...(suggestions.length
+          ? suggestions.map((suggestion) => ({
+              label: suggestion,
+              click: () => window.webContents.replaceMisspelling(suggestion),
+            }))
+          : [{ label: "No suggestions", enabled: false }]),
+        { type: "separator" },
+        {
+          label: "Replace all",
+          enabled: suggestions.length > 0,
+          submenu: suggestions.map((suggestion) => ({
+            label: suggestion,
+            click: () =>
+              window.webContents.send(
+                "spellcheck:replace-all",
+                word,
+                suggestion,
+              ),
+          })),
+        },
+        {
+          label: "Add to dictionary",
           click: () =>
-            window.webContents.send("spellcheck:replace-all", word, suggestion),
-        })),
-      },
-      {
-        label: "Add to dictionary",
-        click: () =>
-          window.webContents.session.addWordToSpellCheckerDictionary(word),
-      },
-    );
-    Menu.buildFromTemplate(template).popup({ window });
+            window.webContents.session.addWordToSpellCheckerDictionary(word),
+        },
+      ]);
+    }
+    append(textContextMenuItems(params));
+    if (template.length) Menu.buildFromTemplate(template).popup({ window });
   });
   if (process.env.OSCODE_DEBUG_RENDERER === "1") {
     window.webContents.on("console-message", (_event, level, message) =>
@@ -2947,8 +3014,7 @@ async function runSmokeTest(window: BrowserWindow) {
     if (!shellReady) throw new Error("chat shell did not become ready");
 
     const qaScreenshotPath = process.env.OSCHAT_QA_SCREENSHOT;
-    const qaView = process.env.OSCHAT_QA_VIEW;
-    if (qaScreenshotPath && !qaView) {
+    if (qaScreenshotPath) {
       // The readiness marker is committed before Chromium necessarily presents
       // the next composited frame. Let the real shell paint before native QA
       // captures it so the screenshot cannot retain the loading surface.
@@ -2964,7 +3030,7 @@ async function runSmokeTest(window: BrowserWindow) {
           title: document.title,
           branded: text.includes("osChat"),
           chats: text.includes("Chats"),
-          notes: text.includes("Notes"),
+          notesRemoved: ![...document.querySelectorAll(".workspace-nav button")].some((button) => button.textContent?.trim().startsWith("Notes")),
           secureBridge: typeof window.oscode?.ensureChatWorkspace === "function",
           developerTerminalVisible: Boolean(document.querySelector(".terminal-panel, .terminal-dock")),
         };
@@ -2975,7 +3041,7 @@ async function runSmokeTest(window: BrowserWindow) {
       renderer.title !== "osChat" ||
       !renderer.branded ||
       !renderer.chats ||
-      !renderer.notes ||
+      !renderer.notesRemoved ||
       !renderer.secureBridge ||
       renderer.developerTerminalVisible
     )
@@ -2983,9 +3049,6 @@ async function runSmokeTest(window: BrowserWindow) {
 
     const newChatResult = (await window.webContents.executeJavaScript(
       `(async () => {
-        const notes = [...document.querySelectorAll(".workspace-nav > button")].find((button) => button.textContent?.trim().startsWith("Notes"));
-        notes?.click();
-        await new Promise((resolve) => setTimeout(resolve, 120));
         document.querySelector(".new-chat-button")?.click();
         const deadline = Date.now() + 8_000;
         let state;
@@ -3154,28 +3217,6 @@ async function runSmokeTest(window: BrowserWindow) {
         `native workspace bridge assertions failed: ${JSON.stringify(artifactResult)}`,
       );
 
-    if (
-      qaScreenshotPath &&
-      ["document", "spreadsheet", "presentation"].includes(qaView || "")
-    ) {
-      await window.webContents.executeJavaScript(
-        `(async () => {
-          const label = ${JSON.stringify(qaView)} === "document" ? "Documents" : ${JSON.stringify(qaView)} === "spreadsheet" ? "Spreadsheets" : "Presentations";
-          const notes = [...document.querySelectorAll(".workspace-nav > button")].find((button) => button.textContent?.trim().startsWith("Notes"));
-          notes?.click();
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          const navigation = [...document.querySelectorAll(".notes-kind-nav button")].find((button) => button.textContent?.includes(label));
-          navigation?.click();
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          document.querySelector(".artifact-create-icon")?.click();
-          await new Promise((resolve) => setTimeout(resolve, 700));
-        })()`,
-        true,
-      );
-      const image = await window.webContents.capturePage();
-      await fs.writeFile(qaScreenshotPath, image.toPNG());
-    }
-
     await fs.rm(artifactFile("document", smokeArtifactId), { force: true });
     clearTimeout(timeout);
     console.log("osChat native smoke passed");
@@ -3200,7 +3241,7 @@ function createApplicationMenu() {
       title: "About osChat",
       message: `osChat ${app.getVersion()}`,
       detail:
-        "A private, local-first AI chat and productivity workspace. osChat includes no telemetry or analytics.",
+        "A private, local-first AI chat workspace. osChat includes no telemetry or analytics.",
       buttons: ["OK"],
       defaultId: 0,
       noLink: true,
@@ -3234,21 +3275,6 @@ function createApplicationMenu() {
           label: "New Chat",
           accelerator: "CmdOrCtrl+N",
           click: send("new-chat"),
-        },
-        {
-          label: "New Document",
-          accelerator: "CmdOrCtrl+Shift+D",
-          click: send("new-document"),
-        },
-        {
-          label: "New Spreadsheet",
-          accelerator: "CmdOrCtrl+Shift+S",
-          click: send("new-spreadsheet"),
-        },
-        {
-          label: "New Presentation",
-          accelerator: "CmdOrCtrl+Shift+P",
-          click: send("new-presentation"),
         },
         { type: "separator" },
         process.platform === "darwin" ? { role: "close" } : { role: "quit" },
@@ -3374,7 +3400,7 @@ function registerIpc() {
   });
   ipcMain.handle("app:open-external-url", async (_event, rawUrl: unknown) => {
     if (typeof rawUrl !== "string") throw new Error("Invalid website address");
-    const url = assertReceiveOnlyPublicUrl(rawUrl).toString();
+    const url = assertUserOpenedHttpUrl(rawUrl);
     await shell.openExternal(url, { activate: true });
     return url;
   });

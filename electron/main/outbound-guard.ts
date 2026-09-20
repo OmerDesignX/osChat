@@ -92,6 +92,19 @@ export function assertReceiveOnlyPublicUrl(raw: string) {
   return url;
 }
 
+/** A link the person explicitly clicked is not an autonomous web request. */
+export function assertUserOpenedHttpUrl(raw: string) {
+  if (raw.length > 4096) throw new Error("Link address is too long");
+  const url = new URL(raw);
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    throw new Error("Only HTTP and HTTPS links can be opened");
+  return url.toString();
+}
+
 export type BrowserRequestDetails = {
   method: string;
   url: string;

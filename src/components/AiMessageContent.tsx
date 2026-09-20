@@ -36,6 +36,7 @@ export type ChatArtifactPayload = {
 type Props = {
   content: string;
   onOpenArtifact?: (artifact: ChatArtifactPayload) => void;
+  onLinkError?: (message: string) => void;
 };
 
 const artifactBlock = /```oschat-(?:artifact|widget)\s*\n([\s\S]*?)```/gi;
@@ -57,7 +58,7 @@ function artifactMarkdown(content: string) {
   const document = new DOMParser().parseFromString(clean, "text/html");
   for (const link of document.querySelectorAll("a")) {
     const href = link.getAttribute("href") || "";
-    if (!/^https:\/\//i.test(href)) link.removeAttribute("href");
+    if (!/^https?:\/\//i.test(href)) link.removeAttribute("href");
     else {
       link.setAttribute("rel", "noreferrer noopener");
       link.setAttribute("target", "_blank");
@@ -261,9 +262,11 @@ function artifactOutput(artifact: ChatArtifactPayload, title: string) {
 function ArtifactPreview({
   artifact,
   onOpen,
+  onLinkError,
 }: {
   artifact: ChatArtifactPayload;
   onOpen?: (artifact: ChatArtifactPayload) => void;
+  onLinkError?: (message: string) => void;
 }) {
   const [tableQuery, setTableQuery] = useState("");
   const [sortColumn, setSortColumn] = useState<number | null>(null);
@@ -463,9 +466,13 @@ function ArtifactPreview({
           onClick={(event) => {
             const link = (event.target as HTMLElement).closest("a");
             const href = link?.getAttribute("href") || "";
-            if (!/^https:\/\//i.test(href)) return;
+            if (!/^https?:\/\//i.test(href)) return;
             event.preventDefault();
-            void window.oscode.openExternalUrl(href);
+            void window.oscode
+              .openExternalUrl(href)
+              .catch(() =>
+                onLinkError?.("Could not open this link in your browser."),
+              );
           }}
           dangerouslySetInnerHTML={{ __html: contentHtml }}
         />
@@ -474,7 +481,11 @@ function ArtifactPreview({
   );
 }
 
-export function AiMessageContent({ content, onOpenArtifact }: Props) {
+export function AiMessageContent({
+  content,
+  onOpenArtifact,
+  onLinkError,
+}: Props) {
   const sourceLinks = useMemo(() => publicLinks(content), [content]);
   const [websiteIcons, setWebsiteIcons] = useState<Record<string, string>>({});
 
@@ -670,9 +681,13 @@ export function AiMessageContent({ content, onOpenArtifact }: Props) {
           }
           const link = (event.target as HTMLElement).closest("a");
           const href = link?.getAttribute("href") || "";
-          if (!/^https:\/\//i.test(href)) return;
+          if (!/^https?:\/\//i.test(href)) return;
           event.preventDefault();
-          void window.oscode.openExternalUrl(href);
+          void window.oscode
+            .openExternalUrl(href)
+            .catch(() =>
+              onLinkError?.("Could not open this link in your browser."),
+            );
         }}
         dangerouslySetInnerHTML={{ __html: parsed.html }}
       />
@@ -681,6 +696,7 @@ export function AiMessageContent({ content, onOpenArtifact }: Props) {
           key={`${artifact.type}-${artifact.title || index}-${index}`}
           artifact={artifact}
           onOpen={onOpenArtifact}
+          onLinkError={onLinkError}
         />
       ))}
     </div>

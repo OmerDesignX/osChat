@@ -2,12 +2,32 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertReceiveOnlyPublicUrl,
+  assertUserOpenedHttpUrl,
   assertSafeExternalPayload,
   assertSafeOutboundText,
   guardedUntrustedContent,
   receiveOnlyBrowserRequest,
   strippedReceiveOnlyHeaders,
 } from "../dist-electron/main/outbound-guard.js";
+
+test("explicitly clicked answer links open normally without relaxing autonomous browsing", () => {
+  assert.equal(
+    assertUserOpenedHttpUrl("https://example.com/search?q=hello%20world"),
+    "https://example.com/search?q=hello%20world",
+  );
+  assert.equal(
+    assertUserOpenedHttpUrl("http://example.com/docs"),
+    "http://example.com/docs",
+  );
+  assert.throws(() => assertReceiveOnlyPublicUrl("http://example.com/docs"));
+  for (const url of [
+    "javascript:alert(1)",
+    "file:///private/data",
+    "https://user:secret@example.com/",
+    "https://example.com/" + "x".repeat(4100),
+  ])
+    assert.throws(() => assertUserOpenedHttpUrl(url));
+});
 
 test("public searches allow short generic terms but block local data", () => {
   assert.equal(

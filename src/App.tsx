@@ -8,20 +8,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { AiPanel } from "./components/AiPanel";
-import type { ChatArtifactPayload } from "./components/AiMessageContent";
 import { FeatherIcon } from "./components/FeatherIcon";
 import { IconButton } from "./components/IconButton";
-import {
-  defaultArtifactData,
-  ProductivityWorkspace,
-} from "./components/ProductivityWorkspaceV2";
 import osChatIcon from "./assets/oschat-icon.png";
-import {
-  deleteProductivityArtifact,
-  duplicateProductivityArtifact,
-  exportProductivityArtifact,
-  patchProductivityArtifact,
-} from "./lib/artifact-collection-actions";
 import {
   deleteChatCollection,
   duplicateChatCollection,
@@ -43,15 +32,9 @@ import type {
   AiTerminalMode,
   AppUpdateStatus,
   EditorPreferences,
-  ArtifactExportFormat,
-  ProductivityArtifact,
-  ProductivityArtifactKind,
-  ProductivityArtifactSummary,
 } from "./types";
 
 type CollectionFilter = "all" | "favorites" | `folder:${string}`;
-type FolderScope = "chat" | "notes";
-type SavedFolderScopes = Record<FolderScope, string[]>;
 type AppNotice = {
   id: string;
   chatId?: string;
@@ -70,7 +53,6 @@ type AppNotice = {
     | "info";
 };
 
-type WorkspaceView = "chat" | ProductivityArtifactKind;
 type ChatActionDialog = {
   action: "rename" | "move" | "delete";
   chat: AiChatThread;
@@ -87,16 +69,6 @@ const emptyUpdate: AppUpdateStatus = {
   state: "disabled",
   message: "Automatic updates are off",
   currentVersion: "",
-};
-const workspaceLabels: Record<ProductivityArtifactKind, string> = {
-  document: "Documents",
-  spreadsheet: "Spreadsheets",
-  presentation: "Presentations",
-};
-const workspaceIcons: Record<ProductivityArtifactKind, string> = {
-  document: "file-text",
-  spreadsheet: "grid",
-  presentation: "monitor",
 };
 const newId = () => globalThis.crypto.randomUUID();
 const NOTICE_AUTO_DISMISS_MS = 10_000;
@@ -121,19 +93,6 @@ function attentionNotification(attention: AiAttention): {
     return { title: "Failed", kind: "error" };
   return { title: "Complete", kind: "response" };
 }
-function escapeHtml(value: string) {
-  return value.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#039;",
-      })[character] || character,
-  );
-}
 function scrollHorizontalMenu(event: WheelEvent) {
   const target =
     event.target instanceof Element
@@ -153,20 +112,21 @@ function cleanFolderList(value: unknown) {
     ? value.filter((item): item is string => typeof item === "string")
     : [];
 }
-function loadFolderScopes(): SavedFolderScopes {
+function loadChatFolders(): string[] {
   try {
+    const current = JSON.parse(
+      localStorage.getItem("oschat-chat-folders-v3") || "null",
+    );
+    if (Array.isArray(current)) return cleanFolderList(current);
     const stored = JSON.parse(
       localStorage.getItem("oschat-folder-scopes-v2") || "null",
-    ) as Partial<SavedFolderScopes> | null;
+    ) as { chat?: unknown } | null;
     if (stored && typeof stored === "object")
-      return {
-        chat: cleanFolderList(stored.chat),
-        notes: cleanFolderList(stored.notes),
-      };
+      return cleanFolderList(stored.chat);
     const legacy = JSON.parse(localStorage.getItem("oschat-folders") || "[]");
-    return { chat: cleanFolderList(legacy), notes: [] };
+    return cleanFolderList(legacy);
   } catch {
-    return { chat: [], notes: [] };
+    return [];
   }
 }
 
@@ -189,14 +149,6 @@ function OsChatWordmark({ settings = false }: { settings?: boolean }) {
 export function App() {
   const [ready, setReady] = useState(false);
   const [workspaceRoot, setWorkspaceRoot] = useState("");
-  const [view, setView] = useState<WorkspaceView>("chat");
-  const [artifacts, setArtifacts] = useState<ProductivityArtifactSummary[]>([]);
-  const [activeArtifact, setActiveArtifact] =
-    useState<ProductivityArtifact | null>(null);
-  const [artifactSaving, setArtifactSaving] = useState(false);
-  const artifactSaveTimer = useRef<number | null>(null);
-  const activeArtifactRef = useRef<ProductivityArtifact | null>(null);
-  activeArtifactRef.current = activeArtifact;
 
   const [agentState, setAgentState] = useState(emptyAgentState);
   const [activeChatId, setActiveChatId] = useState("");
@@ -210,10 +162,7 @@ export function App() {
   const [itemMenuPosition, setItemMenuPosition] = useState({ top: 0, left: 0 });
   const [chatAction, setChatAction] = useState<ChatActionDialog | null>(null);
   const [chatActionSaving, setChatActionSaving] = useState(false);
-  const [notesView, setNotesView] =
-    useState<ProductivityArtifactKind>("document");
-  const [savedFolderScopes, setSavedFolderScopes] =
-    useState<SavedFolderScopes>(loadFolderScopes);
+  const [savedFolders, setSavedFolders] = useState<string[]>(loadChatFolders);
   const [folderEditorOpen, setFolderEditorOpen] = useState(false);
   const [folderDraft, setFolderDraft] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -329,13 +278,6 @@ export function App() {
     }
   }, [addNotification, autoUpdateEnabled, updateStatus.state]);
 
-  const refreshArtifacts = useCallback(async () => {
-    const next = await window.oscode.listArtifacts();
-    setArtifacts(next);
-    const current = activeArtifactRef.current;
-    if (current && next.some((item) => item.id === current.id))
-      setActiveArtifact(await window.oscode.readArtifact(current.id));
-  }, []);
   const refreshAgentState = useCallback(async () => {
     const next = await window.oscode.aiAgentState();
     setAgentState(next);
@@ -353,9 +295,6 @@ export function App() {
     return () =>
       document.removeEventListener("wheel", scrollHorizontalMenu, true);
   }, []);
-  useEffect(() => {
-    if (view !== "chat") setNotesView(view);
-  }, [view]);
   useEffect(() => {
     if (!itemMenu) return;
     const close = (event: Event) => {
@@ -398,11 +337,7 @@ export function App() {
         setAiThinkingEnabled(preferences.aiThinkingEnabled);
         setAutoUpdateEnabled(preferences.autoUpdateEnabled);
         setUpdateStatus(status);
-        await Promise.all([
-          refreshArtifacts(),
-          refreshAgentState(),
-          refreshModels(),
-        ]);
+        await Promise.all([refreshAgentState(), refreshModels()]);
         setReady(true);
       } catch (error) {
         setNotice(errorMessage(error));
@@ -493,10 +428,10 @@ export function App() {
   }, [theme, uiScale]);
   useEffect(() => {
     localStorage.setItem(
-      "oschat-folder-scopes-v2",
-      JSON.stringify(savedFolderScopes),
+      "oschat-chat-folders-v3",
+      JSON.stringify(savedFolders),
     );
-  }, [savedFolderScopes]);
+  }, [savedFolders]);
   useEffect(() => {
     if (!ready) return;
     void window.oscode
@@ -544,7 +479,6 @@ export function App() {
       aiAttention &&
       aiAttention.kind !== "permission" &&
       aiAttention.chatId === activeChatId &&
-      view === "chat" &&
       document.visibilityState === "visible" &&
       document.hasFocus(),
     );
@@ -566,11 +500,10 @@ export function App() {
         aiAttention.chatId,
       );
     }
-  }, [activeChatId, addNotification, aiAttention, markVisibleChatRead, view]);
+  }, [activeChatId, addNotification, aiAttention, markVisibleChatRead]);
   useEffect(() => {
     const acknowledgeVisibleChat = () => {
       if (
-        view === "chat" &&
         activeChatId &&
         document.visibilityState === "visible" &&
         document.hasFocus()
@@ -585,7 +518,7 @@ export function App() {
       window.removeEventListener("focus", acknowledgeVisibleChat);
       document.removeEventListener("visibilitychange", acknowledgeVisibleChat);
     };
-  }, [activeChatId, markVisibleChatRead, view]);
+  }, [activeChatId, markVisibleChatRead]);
   useEffect(() => {
     if (notificationsOpen) markNotificationPanelRead();
   }, [markNotificationPanelRead, notificationsOpen]);
@@ -595,121 +528,8 @@ export function App() {
     [notifications],
   );
 
-  const saveArtifact = useCallback(
-    async (artifact = activeArtifactRef.current) => {
-      if (!artifact) return;
-      setArtifactSaving(true);
-      try {
-        const saved = await window.oscode.saveArtifact(artifact);
-        setActiveArtifact((current) =>
-          current?.id === saved.id ? { ...current, ...saved } : current,
-        );
-        await refreshArtifacts();
-      } catch (error) {
-        setNotice(errorMessage(error));
-      } finally {
-        setArtifactSaving(false);
-      }
-    },
-    [refreshArtifacts],
-  );
-  const changeArtifact = (artifact: ProductivityArtifact) => {
-    setActiveArtifact(artifact);
-    if (artifactSaveTimer.current)
-      window.clearTimeout(artifactSaveTimer.current);
-    artifactSaveTimer.current = window.setTimeout(
-      () => void saveArtifact(artifact),
-      650,
-    );
-  };
-  const createArtifact = async (
-    kind: ProductivityArtifactKind,
-    title = `Untitled ${kind}`,
-    data = defaultArtifactData(kind),
-  ) => {
-    const now = new Date().toISOString();
-    const artifact: ProductivityArtifact = {
-      id: newId(),
-      kind,
-      title,
-      folder: "",
-      favorite: false,
-      createdAt: now,
-      updatedAt: now,
-      data,
-    };
-    const saved = await window.oscode.saveArtifact(artifact);
-    setArtifacts(await window.oscode.listArtifacts());
-    setActiveArtifact({ ...artifact, ...saved });
-    setView(kind);
-  };
-  const openArtifact = async (summary: ProductivityArtifactSummary) => {
-    setActiveArtifact(await window.oscode.readArtifact(summary.id));
-    setView(summary.kind);
-  };
-  const openChatArtifact = async (payload: ChatArtifactPayload) => {
-    if (!["document", "spreadsheet", "presentation"].includes(payload.type))
-      return;
-    const kind = payload.type as ProductivityArtifactKind;
-    let data = payload.data || defaultArtifactData(kind);
-    if (kind === "document" && !payload.data) {
-      const content = payload.content || payload.description || "";
-      data = {
-        html: `<h1>${escapeHtml(payload.title || "AI document")}</h1><p>${escapeHtml(content).replace(/\n/g, "</p><p>")}</p>`,
-        plainText: `${payload.title || "AI document"}\n${content}`,
-        page: "letter",
-        zoom: 1,
-      };
-    }
-    if (kind === "spreadsheet" && !payload.data) {
-      const rows = [
-        payload.headers || [],
-        ...(payload.rows || []).map((row) => row.map(String)),
-      ];
-      while (rows.length < 30)
-        rows.push(Array(Math.max(12, rows[0]?.length || 0)).fill(""));
-      const sheet = {
-        id: newId(),
-        name: "Sheet 1",
-        cells: rows.map((row) => {
-          const next = [...row];
-          while (next.length < 12) next.push("");
-          return next;
-        }),
-        styles: {},
-      };
-      data = { sheets: [sheet], activeSheetId: sheet.id };
-    }
-    if (kind === "presentation" && !payload.data) {
-      const points = (payload.content || payload.description || "")
-        .split(/\n+/)
-        .filter(Boolean);
-      const slides = [
-        {
-          id: newId(),
-          title: payload.title || "AI presentation",
-          body: payload.description || "",
-          notes: "",
-          background: "#20262a",
-          layout: "title",
-        },
-        ...points.slice(0, 12).map((point, index) => ({
-          id: newId(),
-          title: `Idea ${index + 1}`,
-          body: point,
-          notes: "",
-          background: "#20262a",
-          layout: "section",
-        })),
-      ];
-      data = { slides, activeSlideId: slides[0].id, theme: "gunmetal" };
-    }
-    await createArtifact(kind, payload.title || `AI ${kind}`, data);
-  };
-
   const newChat = async () => {
     const chat = await window.oscode.createAiChat(undefined, true);
-    setView("chat");
     setActiveChatId(chat.id);
     setAgentState(await window.oscode.aiAgentState());
     window.dispatchEvent(
@@ -723,26 +543,6 @@ export function App() {
     try {
       await patchChatCollection(window.oscode, chat, patch);
       await refreshAgentState();
-      return true;
-    } catch (error) {
-      setNotice(errorMessage(error));
-      return false;
-    } finally {
-      setItemMenu("");
-    }
-  };
-  const updateArtifactCollection = async (
-    artifact: ProductivityArtifactSummary,
-    patch: { title?: string; folder?: string; favorite?: boolean },
-  ): Promise<boolean> => {
-    try {
-      await patchProductivityArtifact(
-        window.oscode,
-        artifact,
-        activeArtifactRef.current,
-        patch,
-      );
-      await refreshArtifacts();
       return true;
     } catch (error) {
       setNotice(errorMessage(error));
@@ -824,95 +624,12 @@ export function App() {
           : `Removed “${chat.title || "New chat"}” from favorites`,
       );
   };
-  const moveArtifact = async (artifact: ProductivityArtifactSummary) => {
-    const folder = globalThis.prompt(
-      `Move ${artifact.kind} to folder`,
-      artifact.folder || "",
-    );
-    if (folder === null) {
-      setItemMenu("");
-      return;
-    }
-    const nextFolder = folder.trim().slice(0, 80);
-    if (
-      await updateArtifactCollection(artifact, {
-        folder: nextFolder,
-      })
-    )
-      setNotice(
-        nextFolder
-          ? `Moved “${artifact.title}” to ${nextFolder}`
-          : `Moved “${artifact.title}” out of its folder`,
-      );
-  };
-  const toggleArtifactFavorite = async (
-    artifact: ProductivityArtifactSummary,
-  ) => {
-    const favorite = !artifact.favorite;
-    if (await updateArtifactCollection(artifact, { favorite }))
-      setNotice(
-        favorite
-          ? `Added “${artifact.title}” to favorites`
-          : `Removed “${artifact.title}” from favorites`,
-      );
-  };
-  const duplicateArtifact = async (artifact: ProductivityArtifactSummary) => {
-    try {
-      const now = new Date().toISOString();
-      const saved = await duplicateProductivityArtifact(
-        window.oscode,
-        artifact,
-        activeArtifactRef.current,
-        newId(),
-        now,
-      );
-      await refreshArtifacts();
-      setNotice(`Duplicated “${artifact.title}”`);
-      await openArtifact(saved);
-    } catch (error) {
-      setNotice(errorMessage(error));
-    } finally {
-      setItemMenu("");
-    }
-  };
-  const exportArtifactFromLibrary = async (
-    artifact: ProductivityArtifactSummary,
-  ) => {
-    setItemMenu("");
-    try {
-      const exported = await exportProductivityArtifact(
-        window.oscode,
-        artifact,
-        activeArtifactRef.current,
-      );
-      if (exported) setNotice(`Exported to ${exported}`);
-    } catch (error) {
-      setNotice(errorMessage(error));
-    }
-  };
-  const deleteArtifactFromLibrary = async (
-    artifact: ProductivityArtifactSummary,
-  ) => {
-    setItemMenu("");
-    try {
-      if (!(await deleteProductivityArtifact(window.oscode, artifact))) return;
-      if (activeArtifactRef.current?.id === artifact.id) {
-        activeArtifactRef.current = null;
-        setActiveArtifact(null);
-      }
-      await refreshArtifacts();
-      setNotice(`Moved “${artifact.title}” to Trash`);
-    } catch (error) {
-      setNotice(errorMessage(error));
-    }
-  };
   const duplicateChat = async (chat: AiChatThread) => {
     setItemMenu("");
     try {
       const copy = await duplicateChatCollection(window.oscode, chat);
       await refreshAgentState();
       setActiveChatId(copy.id);
-      setView("chat");
       window.dispatchEvent(
         new CustomEvent("oscode:open-ai-chat", { detail: copy.id }),
       );
@@ -925,14 +642,10 @@ export function App() {
     () =>
       window.oscode.onMenuAction((action) => {
         if (action === "new-chat") void newChat();
-        else if (action === "show-chats") setView("chat");
-        else if (action === "show-notes") setView(notesView);
-        else if (action === "new-document") void createArtifact("document");
-        else if (action === "new-spreadsheet")
-          void createArtifact("spreadsheet");
-        else if (action === "new-presentation")
-          void createArtifact("presentation");
-        else if (action === "toggle-theme")
+        else if (action === "show-chats") {
+          setSettingsOpen(false);
+          setNotificationsOpen(false);
+        } else if (action === "toggle-theme")
           setTheme((current) =>
             current === "dark"
               ? "blue-dark"
@@ -943,12 +656,6 @@ export function App() {
       }),
     [],
   );
-  useEffect(() => {
-    if (window.oscode.platform !== "darwin") return;
-    void window.oscode.setTouchBarState({
-      section: view === "chat" ? "chats" : "notes",
-    });
-  }, [view]);
   const filteredChats = useMemo(() => {
     const query = chatSearch.trim().toLowerCase();
     return sortChatsByRecentActivity(agentState.chats).filter(
@@ -964,49 +671,23 @@ export function App() {
           )),
     );
   }, [agentState.chats, chatSearch, collectionFilter]);
-  const visibleArtifacts = useMemo(() => {
-    const query = chatSearch.trim().toLowerCase();
-    return artifacts.filter(
-      (artifact) =>
-        (collectionFilter === "all" ||
-          (collectionFilter === "favorites" && artifact.favorite) ||
-          (collectionFilter.startsWith("folder:") &&
-            artifact.folder === collectionFilter.slice(7))) &&
-        (!query || artifact.title.toLowerCase().includes(query)) &&
-        (view === "chat" || artifact.kind === view),
-    );
-  }, [artifacts, chatSearch, collectionFilter, view]);
-  const folderScope: FolderScope = view === "chat" ? "chat" : "notes";
-  const previousFolderScope = useRef<FolderScope>(folderScope);
-  useEffect(() => {
-    if (previousFolderScope.current === folderScope) return;
-    previousFolderScope.current = folderScope;
-    setCollectionFilter("all");
-    setFolderEditorOpen(false);
-    setFolderDraft("");
-  }, [folderScope]);
   const folders = useMemo(
     () =>
       [
-        ...new Set(
-          [
-            ...savedFolderScopes[folderScope],
-            ...(folderScope === "chat"
-              ? agentState.chats.map((chat) => chat.folder)
-              : artifacts.map((artifact) => artifact.folder)),
-          ].filter(Boolean),
-        ),
-      ].sort((a, b) => a.localeCompare(b)),
-    [agentState.chats, artifacts, folderScope, savedFolderScopes],
+        ...new Set([
+          ...savedFolders,
+          ...agentState.chats.map((chat) => chat.folder),
+        ]),
+      ]
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [agentState.chats, savedFolders],
   );
   const createFolder = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const folder = folderDraft.replace(/\s+/g, " ").trim().slice(0, 80);
     if (!folder) return;
-    setSavedFolderScopes((current) => ({
-      ...current,
-      [folderScope]: [...new Set([...current[folderScope], folder])],
-    }));
+    setSavedFolders((current) => [...new Set([...current, folder])]);
     setFolderDraft("");
     setFolderEditorOpen(false);
   };
@@ -1064,10 +745,7 @@ export function App() {
       onComputerAccess={setAiComputerAccess}
       onContextLimit={setAiContextLimit}
       onHardwarePreference={setAiHardware}
-      onChanged={async () => {
-        await refreshArtifacts();
-        await refreshAgentState();
-      }}
+      onChanged={async () => refreshAgentState()}
       onNotice={(message) => {
         setNotice(message);
         addNotification("osChat", message, "info");
@@ -1077,7 +755,6 @@ export function App() {
         void refreshAgentState();
       }}
       onAttentionChange={setAiAttention}
-      onOpenArtifact={(artifact) => void openChatArtifact(artifact)}
     />
   );
 
@@ -1118,22 +795,18 @@ export function App() {
         </div>
       )}
       <header className="oschat-topbar">
-        <button
-          className="oschat-brand"
-          type="button"
-          onClick={() => setView("chat")}
-        >
+        <div className="oschat-brand">
           <img src={osChatIcon} alt="" />
           <b>
             <OsChatWordmark />
           </b>
-        </button>
+        </div>
         <label className="oschat-global-search">
           <FeatherIcon icon="search" size="17" />
           <input
             type="search"
             value={chatSearch}
-            placeholder="Search chats and workspaces"
+            placeholder="Search chats"
             onChange={(event) => setChatSearch(event.target.value)}
           />
         </label>
@@ -1196,7 +869,6 @@ export function App() {
                   if (!item.chatId) return;
                   markVisibleChatRead(item.chatId);
                   setActiveChatId(item.chatId);
-                  setView("chat");
                   setNotificationsOpen(false);
                 }}
                 onKeyDown={(event) => {
@@ -1296,46 +968,16 @@ export function App() {
             <span>{window.oscode.platform === "darwin" ? "⌘N" : "Ctrl N"}</span>
           </button>
           <div className="sidebar-divider new-chat-divider" />
-          <nav className="workspace-nav" aria-label="Workspaces">
+          <nav className="workspace-nav" aria-label="Chats">
             <button
               type="button"
-              className={view === "chat" ? "active" : ""}
-              onClick={() => setView("chat")}
+              className="active"
+              onClick={() => setCollectionFilter("all")}
             >
               <FeatherIcon icon="message-square" size="18" />
               Chats
             </button>
-            <button
-              type="button"
-              className={view !== "chat" ? "active" : ""}
-              aria-expanded={view !== "chat"}
-              onClick={() => setView(notesView)}
-            >
-              <FeatherIcon icon="file-text" size="18" />
-              Notes
-              <span>{artifacts.length}</span>
-            </button>
           </nav>
-          {view !== "chat" && (
-            <nav className="notes-kind-nav" aria-label="Note types">
-              {(Object.keys(workspaceLabels) as ProductivityArtifactKind[]).map(
-                (kind) => (
-                  <button
-                    type="button"
-                    key={kind}
-                    className={view === kind ? "active" : ""}
-                    onClick={() => setView(kind)}
-                  >
-                    <FeatherIcon icon={workspaceIcons[kind]} size="16" />
-                    {workspaceLabels[kind]}
-                    <span>
-                      {artifacts.filter((item) => item.kind === kind).length}
-                    </span>
-                  </button>
-                ),
-              )}
-            </nav>
-          )}
           <div className="sidebar-divider" />
           <section className="collection-browser" aria-label="Library filters">
             <div className="collection-tabs">
@@ -1355,13 +997,11 @@ export function App() {
               </button>
             </div>
             <header>
-              <span>
-                {folderScope === "chat" ? "Chat folders" : "Note folders"}
-              </span>
+              <span>Chat folders</span>
               <button
                 type="button"
                 aria-label="New folder"
-                title={`Add a ${folderScope} folder`}
+                title="Add a chat folder"
                 aria-expanded={folderEditorOpen}
                 aria-controls="folder-create-form"
                 onClick={() => {
@@ -1382,7 +1022,7 @@ export function App() {
                   autoFocus
                   value={folderDraft}
                   maxLength={80}
-                  aria-label={`Name for new ${folderScope} folder`}
+                  aria-label="Name for new chat folder"
                   placeholder="Folder name"
                   onChange={(event) => setFolderDraft(event.target.value)}
                   onKeyDown={(event) => {
@@ -1427,172 +1067,60 @@ export function App() {
                   <FeatherIcon icon="folder" size="14" /> {folder}
                 </button>
               ))}
-              {!folders.length && (
-                <small>
-                  {folderScope === "chat"
-                    ? "Create folders for your chats."
-                    : "Create folders shared by all notes."}
-                </small>
-              )}
+              {!folders.length && <small>Create folders for your chats.</small>}
             </div>
           </section>
-          {view === "chat" ? (
-            <section className="sidebar-list">
-              <header>
-                <span>Recent chats</span>
-              </header>
-              <div>
-                {filteredChats.map((chat) => {
-                  const preview = chatListPreview(
-                    publicAssistantText(chat.messages.at(-1)?.content || ""),
-                  );
-                  return (
-                    <article
-                      key={chat.id}
-                      className={`${chat.id === activeChatId ? "active" : ""}${
-                        chat.favorite ? " favorite" : ""
-                      }`.trim()}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveChatId(chat.id);
-                          setView("chat");
-                        }}
-                      >
-                        <b>{chat.title || "New chat"}</b>
-                        {preview !== null && (
-                          <small>
-                            {preview.slice(0, 70) || "No messages yet"}
-                          </small>
-                        )}
-                      </button>
-                      {chat.favorite && (
-                        <button
-                          type="button"
-                          className="chat-favorite-toggle"
-                          aria-label={`Remove ${chat.title || "New chat"} from favorites`}
-                          title="Remove from favorites"
-                          onClick={() => void toggleChatFavorite(chat)}
-                        >
-                          <FeatherIcon icon="star" size="16" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="item-more"
-                        aria-label={`Options for ${chat.title}`}
-                        onClick={(event) =>
-                          toggleItemMenu(`chat:${chat.id}`, event.currentTarget)
-                        }
-                      >
-                        <FeatherIcon icon="more-horizontal" size="17" />
-                      </button>
-                      {itemMenu === `chat:${chat.id}` &&
-                        createPortal(
-                          <div
-                            className="sidebar-item-menu sidebar-item-menu-portal"
-                            style={itemMenuPosition}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => openChatAction("rename", chat)}
-                            >
-                              <FeatherIcon icon="edit-3" size="15" /> Rename
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void toggleChatFavorite(chat)}
-                            >
-                              <FeatherIcon icon="star" size="15" />{" "}
-                              {chat.favorite ? "Remove favorite" : "Favorite"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openChatAction("move", chat)}
-                            >
-                              <FeatherIcon icon="folder" size="15" /> Move to
-                              folder
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void duplicateChat(chat)}
-                            >
-                              <FeatherIcon icon="copy" size="15" /> Duplicate
-                            </button>
-                            <button
-                              type="button"
-                              className="danger"
-                              onClick={() => openChatAction("delete", chat)}
-                            >
-                              <FeatherIcon icon="trash-2" size="15" /> Delete
-                            </button>
-                          </div>,
-                          document.querySelector(".oschat-app") ||
-                            document.body,
-                        )}
-                    </article>
-                  );
-                })}
-                {!filteredChats.length && (
-                  <p>
-                    {chatSearch.trim() || collectionFilter !== "all"
-                      ? "No chats match this view."
-                      : "No chats yet. Start a new conversation."}
-                  </p>
-                )}
-              </div>
-            </section>
-          ) : (
-            <section className="sidebar-list">
-              <header className="artifact-library-header">
-                <span>{workspaceLabels[view]}</span>
-                <button
-                  type="button"
-                  aria-label={`New ${view}`}
-                  className="artifact-create-icon"
-                  onClick={() => void createArtifact(view)}
-                >
-                  <FeatherIcon icon="plus" size="18" />
-                </button>
-              </header>
-              <div>
-                {visibleArtifacts.map((artifact) => (
+          <section className="sidebar-list">
+            <header>
+              <span>Recent chats</span>
+            </header>
+            <div>
+              {filteredChats.map((chat) => {
+                const preview = chatListPreview(
+                  publicAssistantText(chat.messages.at(-1)?.content || ""),
+                );
+                return (
                   <article
-                    key={artifact.id}
-                    className={
-                      artifact.id === activeArtifact?.id ? "active" : ""
-                    }
+                    key={chat.id}
+                    className={`${chat.id === activeChatId ? "active" : ""}${
+                      chat.favorite ? " favorite" : ""
+                    }`.trim()}
                   >
                     <button
                       type="button"
-                      className="artifact-list-button"
-                      onClick={() => void openArtifact(artifact)}
+                      onClick={() => {
+                        setActiveChatId(chat.id);
+                      }}
                     >
-                      <i className="artifact-list-icon" aria-hidden="true">
-                        <FeatherIcon
-                          icon={workspaceIcons[artifact.kind]}
-                          size="17"
-                        />
-                      </i>
-                      <span>
-                        <b>{artifact.title}</b>
-                      </span>
+                      <b>{chat.title || "New chat"}</b>
+                      {preview !== null && (
+                        <small>
+                          {preview.slice(0, 70) || "No messages yet"}
+                        </small>
+                      )}
                     </button>
+                    {chat.favorite && (
+                      <button
+                        type="button"
+                        className="chat-favorite-toggle"
+                        aria-label={`Remove ${chat.title || "New chat"} from favorites`}
+                        title="Remove from favorites"
+                        onClick={() => void toggleChatFavorite(chat)}
+                      >
+                        <FeatherIcon icon="star" size="16" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="item-more"
-                      aria-label={`Options for ${artifact.title}`}
+                      aria-label={`Options for ${chat.title}`}
                       onClick={(event) =>
-                        toggleItemMenu(
-                          `artifact:${artifact.id}`,
-                          event.currentTarget,
-                        )
+                        toggleItemMenu(`chat:${chat.id}`, event.currentTarget)
                       }
                     >
                       <FeatherIcon icon="more-horizontal" size="17" />
                     </button>
-                    {itemMenu === `artifact:${artifact.id}` &&
+                    {itemMenu === `chat:${chat.id}` &&
                       createPortal(
                         <div
                           className="sidebar-item-menu sidebar-item-menu-portal"
@@ -1600,41 +1128,34 @@ export function App() {
                         >
                           <button
                             type="button"
-                            aria-pressed={artifact.favorite}
-                            onClick={() =>
-                              void toggleArtifactFavorite(artifact)
-                            }
+                            onClick={() => openChatAction("rename", chat)}
                           >
-                            <FeatherIcon icon="star" size="15" />{" "}
-                            {artifact.favorite ? "Remove favorite" : "Favorite"}
+                            <FeatherIcon icon="edit-3" size="15" /> Rename
                           </button>
                           <button
                             type="button"
-                            onClick={() => void moveArtifact(artifact)}
+                            onClick={() => void toggleChatFavorite(chat)}
+                          >
+                            <FeatherIcon icon="star" size="15" />{" "}
+                            {chat.favorite ? "Remove favorite" : "Favorite"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openChatAction("move", chat)}
                           >
                             <FeatherIcon icon="folder" size="15" /> Move to
                             folder
                           </button>
                           <button
                             type="button"
-                            onClick={() => void duplicateArtifact(artifact)}
+                            onClick={() => void duplicateChat(chat)}
                           >
                             <FeatherIcon icon="copy" size="15" /> Duplicate
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              void exportArtifactFromLibrary(artifact)
-                            }
-                          >
-                            <FeatherIcon icon="download" size="15" /> Export
-                          </button>
-                          <button
-                            type="button"
                             className="danger"
-                            onClick={() =>
-                              void deleteArtifactFromLibrary(artifact)
-                            }
+                            onClick={() => openChatAction("delete", chat)}
                           >
                             <FeatherIcon icon="trash-2" size="15" /> Delete
                           </button>
@@ -1642,15 +1163,17 @@ export function App() {
                         document.querySelector(".oschat-app") || document.body,
                       )}
                   </article>
-                ))}
-                {!visibleArtifacts.length && (
-                  <p>
-                    Your {workspaceLabels[view].toLowerCase()} will appear here.
-                  </p>
-                )}
-              </div>
-            </section>
-          )}
+                );
+              })}
+              {!filteredChats.length && (
+                <p>
+                  {chatSearch.trim() || collectionFilter !== "all"
+                    ? "No chats match this view."
+                    : "No chats yet. Start a new conversation."}
+                </p>
+              )}
+            </div>
+          </section>
           <footer>
             <button type="button" onClick={() => setSettingsOpen(true)}>
               <FeatherIcon icon="settings" size="17" />
@@ -1658,52 +1181,7 @@ export function App() {
             </button>
           </footer>
         </aside>
-        <main
-          className={`oschat-main ${
-            view === "chat"
-              ? "chat-view"
-              : activeArtifact?.kind === view
-                ? "artifact-view has-artifact"
-                : "artifact-view empty-artifact"
-          }`}
-        >
-          {view !== "chat" && activeArtifact?.kind === view && (
-            <div className="artifact-editor-pane">
-              <ProductivityWorkspace
-                artifact={activeArtifact}
-                onChange={changeArtifact}
-                onExport={(format: ArtifactExportFormat) =>
-                  void (async () => {
-                    await saveArtifact();
-                    const exported = await window.oscode.exportArtifact(
-                      activeArtifactRef.current!,
-                      format,
-                    );
-                    if (exported) setNotice(`Exported to ${exported}`);
-                  })().catch((error) => setNotice(errorMessage(error)))
-                }
-                onDelete={() => void deleteArtifactFromLibrary(activeArtifact)}
-                saving={artifactSaving}
-              />
-            </div>
-          )}
-          {view !== "chat" && activeArtifact?.kind !== view && (
-            <section className="workspace-empty">
-              <span>
-                <FeatherIcon icon={workspaceIcons[view]} size="32" />
-              </span>
-              <h1>Create your first {view}</h1>
-              <p>
-                Build it yourself or ask osChat to draft, revise, research, and
-                format it with you.
-              </p>
-              <button type="button" onClick={() => void createArtifact(view)}>
-                <FeatherIcon icon="plus" size="17" /> New {view}
-              </button>
-            </section>
-          )}
-          {sharedAi}
-        </main>
+        <main className="oschat-main chat-view">{sharedAi}</main>
       </div>
       {notice && (
         <div className="oschat-toast" role="status">
@@ -1783,7 +1261,7 @@ export function App() {
                 />
                 {chatAction.action === "move" && (
                   <datalist id="oschat-chat-folder-options">
-                    {savedFolderScopes.chat.map((folder) => (
+                    {savedFolders.map((folder) => (
                       <option value={folder} key={folder} />
                     ))}
                   </datalist>
@@ -2139,8 +1617,8 @@ function SettingsDialog(props: SettingsProps) {
           {props.section === "permissions" && (
             <div className="settings-section">
               <SettingToggle
-                label="Files and artifacts"
-                detail="Allow the agent to read your osChat workspace."
+                label="Workspace files"
+                detail="Allow the agent to read files in your osChat workspace."
                 value={props.aiFileAccess}
                 set={props.setAiFileAccess}
               />

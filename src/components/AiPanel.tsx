@@ -3814,6 +3814,7 @@ export function AiPanel({
                 </summary>
                 <AiMessageContent
                   content={publicAssistantText(message.thinking)}
+                  onLinkError={onNotice}
                 />
               </details>
             )}
@@ -3836,6 +3837,7 @@ export function AiPanel({
               <AiMessageContent
                 content={publicAssistantText(message.content)}
                 onOpenArtifact={onOpenArtifact}
+                onLinkError={onNotice}
               />
             ) : (
               <p>{message.content}</p>
@@ -3958,6 +3960,7 @@ export function AiPanel({
                   </summary>
                   <AiMessageContent
                     content={publicAssistantText(liveModelOutput.reasoning)}
+                    onLinkError={onNotice}
                   />
                 </details>
               )}
@@ -3965,6 +3968,7 @@ export function AiPanel({
                 <AiMessageContent
                   content={publicAssistantText(liveModelOutput.answer)}
                   onOpenArtifact={onOpenArtifact}
+                  onLinkError={onNotice}
                 />
               )}
             </article>
