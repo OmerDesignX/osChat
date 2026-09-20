@@ -266,6 +266,23 @@ export async function llamaMediaArguments(
   if (projector && hardware === "cpu") result.push("--no-mmproj-offload");
   return result;
 }
+
+export function llamaCliOutputArguments(executable: string) {
+  // llama-mtmd-cli has its own output mode and rejects these completion-only
+  // flags before it can load the V2 vision projector.
+  return /(?:^|[\\/])llama-mtmd-cli(?:\.exe)?$/i.test(executable)
+    ? []
+    : ["--no-display-prompt", "--no-conversation", "--color", "off"];
+}
+
+export async function findLlamaMediaExecutable(executable: string) {
+  const name =
+    process.platform === "win32" ? "llama-mtmd-cli.exe" : "llama-mtmd-cli";
+  const candidate = path.join(path.dirname(executable), name);
+  return (await fs.stat(candidate).catch(() => null))?.isFile()
+    ? candidate
+    : "";
+}
 type ModelReply = {
   content: string;
   thinking?: string;
@@ -2968,8 +2985,8 @@ export class LocalAiService {
     if (!root) return "";
     const names = multimodal
       ? process.platform === "win32"
-        ? ["llama-mtmd-cli.exe", "llama-cli.exe"]
-        : ["llama-mtmd-cli", "llama-cli"]
+        ? ["llama-mtmd-cli.exe"]
+        : ["llama-mtmd-cli"]
       : process.platform === "win32"
         ? ["llama-completion.exe", "llama-cli.exe"]
         : ["llama-completion", "llama-cli", "llama"];
@@ -5433,12 +5450,9 @@ export class LocalAiService {
       "1.05",
       "--fit",
       "on",
-      "--no-display-prompt",
       "--no-warmup",
-      "--no-conversation",
       "--offline",
-      "--color",
-      "off",
+      ...llamaCliOutputArguments(realExecutable),
       ...llamaPerformanceArguments(helpText),
     ];
     if (privateMedia?.files.length) {
@@ -6168,22 +6182,7 @@ except Exception as error:
       if (request.engine === "llamacpp") {
         let executable = request.executable;
         if (privateMedia?.files.length && executable) {
-          const siblingNames =
-            process.platform === "win32"
-              ? ["llama-cli.exe", "llama-mtmd-cli.exe"]
-              : ["llama-cli", "llama-mtmd-cli"];
-          executable = "";
-          for (const name of siblingNames) {
-            const sibling = path.join(path.dirname(request.executable), name);
-            const ready = await fs
-              .stat(sibling)
-              .then((value) => value.isFile())
-              .catch(() => false);
-            if (ready) {
-              executable = sibling;
-              break;
-            }
-          }
+          executable = await findLlamaMediaExecutable(executable);
         }
         executable ||= await this.bundledLlamaExecutable(
           request.hardware,

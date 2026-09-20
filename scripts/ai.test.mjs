@@ -9,12 +9,14 @@ import {
   attachmentContextForModel,
   compactToolResultForModel,
   fitPromptToContext,
+  findLlamaMediaExecutable,
   hasRenderableInteractiveContent,
   hasPrivateAttachmentContext,
   isUsableBrowserInspection,
   isTrustedOllamaDownloadUrl,
   isPackageInstallCommand,
   llamaMediaArguments,
+  llamaCliOutputArguments,
   llamaPerformanceArguments,
   localMediaMessages,
   LocalAiService,
@@ -301,6 +303,17 @@ test("private multimodal files are short-lived and local runtimes receive media 
     "--image",
     media.files[0].path,
   ]);
+  assert.deepEqual(llamaCliOutputArguments("/opt/llama-mtmd-cli"), []);
+  assert.deepEqual(
+    llamaCliOutputArguments("C:\\llama\\llama-mtmd-cli.exe"),
+    [],
+  );
+  assert.deepEqual(llamaCliOutputArguments("/opt/llama-completion"), [
+    "--no-display-prompt",
+    "--no-conversation",
+    "--color",
+    "off",
+  ]);
   const mediaRouting = localMediaMessages([
     {
       role: "user",
@@ -436,13 +449,17 @@ test("private multimodal files are short-lived and local runtimes receive media 
   assert.equal(unifiedCapabilities.video, false);
   assert.equal(unifiedCapabilities.mediaInput, false);
 
-  const gguf = path.join(base, "model.gguf");
-  const projector = path.join(base, "mmproj-model.gguf");
+  const gguf = path.join(base, "osCode-GGUF-Small-Q4_K_M-00001-of-00002.gguf");
+  const projector = path.join(base, "osCode-GGUF-Small-mmproj-Q5_K_M.gguf");
   await fs.writeFile(gguf, "gguf");
   await fs.writeFile(projector, "projector");
   const ggufCapabilities = await localModelCapabilities("llamacpp", gguf);
   assert.equal(ggufCapabilities.images, true);
   assert.equal(ggufCapabilities.projector, projector);
+  assert.deepEqual(
+    await llamaMediaArguments(media, ggufCapabilities.projector),
+    ["--mmproj", await fs.realpath(projector), "--image", media.files[0].path],
+  );
 
   await fs.rm(projector);
   const unifiedGgufCapabilities = await localModelCapabilities(
@@ -454,6 +471,25 @@ test("private multimodal files are short-lived and local runtimes receive media 
   assert.equal(unifiedGgufCapabilities.audio, true);
   assert.equal(unifiedGgufCapabilities.mediaInput, true);
   assert.equal(unifiedGgufCapabilities.projector, undefined);
+});
+
+test("image requests select the multimodal runner beside a text-only runner", async (t) => {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), "oscode-mtmd-test-"),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const textRunner = path.join(
+    directory,
+    process.platform === "win32" ? "llama-cli.exe" : "llama-cli",
+  );
+  const visionRunner = path.join(
+    directory,
+    process.platform === "win32" ? "llama-mtmd-cli.exe" : "llama-mtmd-cli",
+  );
+  await fs.writeFile(textRunner, "text runner");
+  assert.equal(await findLlamaMediaExecutable(textRunner), "");
+  await fs.writeFile(visionRunner, "vision runner");
+  assert.equal(await findLlamaMediaExecutable(textRunner), visionRunner);
 });
 
 test("attachment egress permission is exact and cannot be replaced by Web access", async (t) => {

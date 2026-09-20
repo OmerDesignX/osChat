@@ -113,7 +113,7 @@ export async function findGguf(directory: string, tier: string) {
   return matches[0] || "";
 }
 
-async function findMlx(
+export async function findMlx(
   directory: string,
   variant: (typeof modelVariants)[number],
 ) {

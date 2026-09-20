@@ -16,6 +16,7 @@ import {
 import {
   defaultBuiltInContext,
   findGguf,
+  findMlx,
   localAiEngine,
   mlxRuntimeSupported,
 } from "../dist-electron/main/bundled-models.js";
@@ -128,6 +129,43 @@ test("GGUF discovery selects the first model shard, never its projector", async 
     path.basename(await findGguf(directory, "small")),
     "osCode-GGUF-Small-Q4_K_M-00001-of-00002.gguf",
   );
+});
+
+test("V2 MLX is not ready until its indexed vision shard is present", async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "model-v2-mlx-"));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const variant = modelVariants.find(
+    (item) => item.runtime === "mlx" && item.tier === "small",
+  );
+  assert.ok(variant);
+  const model = path.join(directory, variant.folder);
+  await fs.mkdir(model);
+  for (const file of [
+    "config.json",
+    "chat_template.jinja",
+    "tokenizer.json",
+    "tokenizer_config.json",
+  ])
+    await fs.writeFile(path.join(model, file), "fixture");
+  await fs.writeFile(
+    path.join(model, "model.safetensors.index.json"),
+    JSON.stringify({
+      weight_map: {
+        "language_model.layers.0": "model-00001-of-00021.safetensors",
+        "vision_tower.blocks.0": "model-vision-00001-of-00001.safetensors",
+      },
+    }),
+  );
+  await fs.writeFile(
+    path.join(model, "model-00001-of-00021.safetensors"),
+    "text weights",
+  );
+  assert.equal(await findMlx(directory, variant), "");
+  await fs.writeFile(
+    path.join(model, "model-vision-00001-of-00001.safetensors"),
+    "vision weights",
+  );
+  assert.equal(await findMlx(directory, variant), model);
 });
 
 test("each tier downloads only its own complete shard set", () => {
