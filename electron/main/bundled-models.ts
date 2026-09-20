@@ -80,7 +80,7 @@ export function localAiEngine(
   return mlxRuntimeSupported(platform, arch, release) ? "mlx" : "llamacpp";
 }
 
-async function findGguf(directory: string, tier: string) {
+export async function findGguf(directory: string, tier: string) {
   const matches: string[] = [];
   const visit = async (current: string, depth: number) => {
     if (depth > 3) return;
@@ -93,15 +93,23 @@ async function findGguf(directory: string, tier: string) {
       if (entry.isDirectory()) await visit(full, depth + 1);
       else if (
         entry.isFile() &&
-        new RegExp(
-          `osCode-GGUF-${tier}-.*(?:-00001-of-\\d{5})?\\.gguf$`,
-          "i",
-        ).test(entry.name)
+        entry.name
+          .toLowerCase()
+          .startsWith("oscode-gguf-" + tier.toLowerCase() + "-") &&
+        /\.gguf$/i.test(entry.name) &&
+        !/[.-]mmproj/i.test(entry.name) &&
+        (!/-\d{5}-of-\d{5}\.gguf$/i.test(entry.name) ||
+          /-00001-of-\d{5}\.gguf$/i.test(entry.name))
       )
         matches.push(full);
     }
   };
   await visit(directory, 0);
+  matches.sort(
+    (left, right) =>
+      Number(!/-00001-of-\d{5}\.gguf$/i.test(path.basename(left))) -
+      Number(!/-00001-of-\d{5}\.gguf$/i.test(path.basename(right))),
+  );
   return matches[0] || "";
 }
 

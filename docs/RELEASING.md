@@ -9,7 +9,7 @@ osChat packages are built locally on each target operating system and uploaded t
 - Keep at least 30 GB free; the scripts stop below 20 GiB.
 - Change only `releaseScripts/VERSION.txt` to begin a release. The platform scripts validate and synchronize the version.
 - Do not rebuild an already-published platform package unless its version or platform source changed.
-- Model weights are downloaded separately from the verified `OmerDesignX/osCode-Models` catalogue and are never embedded in installers.
+- Model weights are downloaded separately as tier-specific archives from `models.omerdesign.com/oscode-models` and are never embedded in installers. The downloader checks archive length, ZIP CRCs, and every required shard before activating a model.
 
 ## macOS
 

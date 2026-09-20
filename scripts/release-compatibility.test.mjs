@@ -488,13 +488,13 @@ test("manual release build preserves the verified native package pipeline", () =
   assert.doesNotMatch(main, /osCode refuses Electron's unprotected basic_text/);
 });
 
-test("model tiers are downloaded on demand from the separate verified catalogue", () => {
+test("model tiers are downloaded on demand from the verified ZIP catalogue", () => {
   const catalogue = read("electron/main/model-catalog.ts");
-  assert.match(catalogue, /OmerDesignX\/osCode-Models/);
-  assert.match(catalogue, /SHA256SUMS/);
-  assert.match(catalogue, /Checksum verification failed/);
+  assert.match(catalogue, /models\.omerdesign\.com\/oscode-models/);
+  assert.match(catalogue, /osModels-.*-D/);
+  assert.match(catalogue, /Archive checksum verification failed/);
   assert.match(catalogue, /\.downloads/);
-  assert.match(catalogue, /fs\.rename\(staging, finalDirectory\)/);
+  assert.match(catalogue, /fs\.rename\(prepared, finalDirectory\)/);
   for (const tier of ["small", "medium", "large"])
     assert.match(catalogue, new RegExp(`tier: "${tier}"`));
 

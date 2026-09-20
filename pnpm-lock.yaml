@@ -35,6 +35,9 @@ importers:
       dompurify:
         specifier: 3.4.13
         version: 3.4.13
+      extract-zip:
+        specifier: 2.0.1
+        version: 2.0.1(supports-color@8.1.1)
       feather-icons:
         specifier: ^4.29.2
         version: 4.29.2
