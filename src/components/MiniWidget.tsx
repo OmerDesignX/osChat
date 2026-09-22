@@ -402,7 +402,7 @@ function FlashcardWidget({
           Previous
         </WidgetButton>
         <WidgetButton
-          icon="refresh-cw"
+          icon="loader"
           onClick={() => setFlipped((value) => !value)}
         >
           Flip

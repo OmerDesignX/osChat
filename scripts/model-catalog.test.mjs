@@ -7,6 +7,7 @@ import {
   archiveFilesForVariant,
   archiveForVariant,
   defaultModelRelease,
+  downloadArchive,
   filesForVariant,
   migrateLegacyModelInstallations,
   migratedModelSelection,
@@ -16,6 +17,7 @@ import {
   modelVariants,
   validateArchiveEntry,
   verifiedCrc32,
+  withModelArchiveFetchFallback,
 } from "../dist-electron/main/model-catalog.js";
 import {
   defaultBuiltInContext,
@@ -25,6 +27,11 @@ import {
   localAiEngine,
   mlxRuntimeSupported,
 } from "../dist-electron/main/bundled-models.js";
+
+const mainSource = await fs.readFile(
+  new URL("../electron/main/index.ts", import.meta.url),
+  "utf8",
+);
 
 test("runtime selection keeps MLX on supported Apple silicon and GGUF everywhere else", () => {
   assert.equal(mlxRuntimeSupported("darwin", "arm64", "23.0.0"), true);
@@ -36,6 +43,14 @@ test("runtime selection keeps MLX on supported Apple silicon and GGUF everywhere
   assert.equal(localAiEngine("linux", "x64", "6.8.0"), "llamacpp");
 });
 
+test("Windows and Linux model downloads use the portable transport fallback", () => {
+  assert.match(
+    mainSource,
+    /modelArchiveFetch: withModelArchiveFetchFallback\(/,
+  );
+  assert.match(mainSource, /globalThis\.fetch\(url, init\)/);
+});
+
 test("built-in models retain their advertised context", () => {
   assert.equal(defaultBuiltInContext("llamacpp"), 262_144);
   assert.equal(defaultBuiltInContext("llamacpp", 4_096), 4_096);
@@ -45,19 +60,23 @@ test("built-in models retain their advertised context", () => {
 test("the public model catalogue maps one selectable tier per runtime", () => {
   assert.equal(modelRepository, "https://models.omerdesign.com/oscode-models");
   assert.equal(defaultModelRelease, "v2");
-  assert.equal(modelVariants.length, 6);
+  assert.equal(modelVariants.length, 8);
   for (const runtime of ["llamacpp", "mlx"])
     assert.deepEqual(
       modelVariants
         .filter((variant) => variant.runtime === runtime)
         .map((variant) => variant.tier),
-      ["small", "medium", "large"],
+      ["xsmall", "small", "medium", "large"],
     );
 });
 
 test("both published releases map every tier to its own ZIP", () => {
   for (const release of ["v1", "v2"])
     for (const variant of modelVariants) {
+      if (release === "v1" && variant.tier === "xsmall") {
+        assert.throws(() => archiveForVariant(variant, release));
+        continue;
+      }
       const archive = archiveForVariant(variant, release);
       assert.match(archive.url, new RegExp("/osModels-V[12]-D/"));
       assert.match(archive.url, /\.zip$/);
@@ -74,6 +93,25 @@ test("both published releases map every tier to its own ZIP", () => {
       if (release === "v2")
         assert.ok(files.some((file) => /mmproj|model-vision/.test(file)));
     }
+});
+
+test("the case-sensitive V2 xSmall archive paths match the published links", () => {
+  const gguf = modelVariants.find(
+    (variant) => variant.runtime === "llamacpp" && variant.tier === "xsmall",
+  );
+  const mlx = modelVariants.find(
+    (variant) => variant.runtime === "mlx" && variant.tier === "xsmall",
+  );
+  assert.ok(gguf);
+  assert.ok(mlx);
+  assert.equal(
+    archiveForVariant(gguf).url,
+    `${modelRepository}/osModels-V2-D/GGUF/xSmall.zip`,
+  );
+  assert.equal(
+    archiveForVariant(mlx).url,
+    `${modelRepository}/osModels-V2-D/MLX/osCode-MLX-xSmall-Q4.zip`,
+  );
 });
 
 test("archive entries reject traversal, links, and unknown files", () => {
@@ -93,12 +131,24 @@ test("archive entries reject traversal, links, and unknown files", () => {
     validateArchiveEntry({ ...entry, fileName: "Small/" }, allowed),
     null,
   );
+  assert.equal(
+    validateArchiveEntry(
+      { ...entry, fileName: "__MACOSX/Small/._model.gguf" },
+      allowed,
+    ),
+    null,
+  );
+  assert.equal(
+    validateArchiveEntry({ ...entry, fileName: "__MACOSX/._Small" }, allowed),
+    null,
+  );
   for (const name of [
     "../model.gguf",
     "/model.gguf",
     "C:/model.gguf",
     "Small\\model.gguf",
     "Small/unknown.gguf",
+    "__MACOSX/Small/unknown.gguf",
   ])
     assert.throws(() =>
       validateArchiveEntry({ ...entry, fileName: name }, allowed),
@@ -109,6 +159,102 @@ test("archive entries reject traversal, links, and unknown files", () => {
       allowed,
     ),
   );
+});
+
+test("archive downloads resume after a transient fetch failure", async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "model-fetch-"));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const destination = path.join(directory, "model.zip");
+  const payload = Buffer.from("verified model archive payload");
+  await fs.writeFile(destination, payload.subarray(0, 8));
+  let calls = 0;
+  await downloadArchive(
+    "https://models.example/model.zip",
+    destination,
+    payload.length,
+    new AbortController().signal,
+    () => {},
+    async (_url, init) => {
+      calls += 1;
+      const range = new Headers(init?.headers).get("range");
+      const offset = Number(range?.match(/^bytes=(\d+)-$/)?.[1]);
+      assert.equal(offset, 8);
+      if (calls === 1) throw new Error("temporary connection loss");
+      return new Response(payload.subarray(offset), {
+        status: 206,
+        headers: {
+          "content-length": String(payload.length - offset),
+          "content-range": `bytes ${offset}-${payload.length - 1}/${payload.length}`,
+        },
+      });
+    },
+  );
+  assert.equal(calls, 2);
+  assert.deepEqual(await fs.readFile(destination), payload);
+});
+
+test("model archive fetch falls back when an Electron transport is unavailable", async () => {
+  const controller = new AbortController();
+  let fallbackCalls = 0;
+  const fetchArchive = withModelArchiveFetchFallback(
+    async () => new Response("blocked by transport", { status: 403 }),
+    async (url, init) => {
+      fallbackCalls += 1;
+      assert.equal(url, "https://models.example/model.zip");
+      assert.equal(new Headers(init?.headers).get("range"), "bytes=8-");
+      assert.equal(init?.signal, controller.signal);
+      return new Response("archive", { status: 206 });
+    },
+  );
+  const response = await fetchArchive("https://models.example/model.zip", {
+    signal: controller.signal,
+    headers: { range: "bytes=8-" },
+  });
+  assert.equal(response.status, 206);
+  assert.equal(fallbackCalls, 1);
+});
+
+test("missing archives do not retry through a second transport", async () => {
+  let fallbackCalls = 0;
+  const fetchArchive = withModelArchiveFetchFallback(
+    async () => new Response(null, { status: 404 }),
+    async () => {
+      fallbackCalls += 1;
+      return new Response(null, { status: 200 });
+    },
+  );
+  assert.equal(
+    (await fetchArchive("https://models.example/missing.zip")).status,
+    404,
+  );
+  assert.equal(fallbackCalls, 0);
+});
+
+test("a rejected range restarts the archive cleanly", async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "model-range-"));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const destination = path.join(directory, "model.zip");
+  const payload = Buffer.from("portable complete archive");
+  await fs.writeFile(destination, payload.subarray(0, 8));
+  const ranges = [];
+  await downloadArchive(
+    "https://models.example/model.zip",
+    destination,
+    payload.length,
+    new AbortController().signal,
+    () => {},
+    async (_url, init) => {
+      const range = new Headers(init?.headers).get("range");
+      ranges.push(range);
+      if (ranges.length === 1) return new Response(null, { status: 416 });
+      return new Response(payload, {
+        status: 200,
+        headers: { "content-length": String(payload.length) },
+      });
+    },
+  );
+  assert.deepEqual(ranges, ["bytes=8-", null]);
+  assert.deepEqual(await fs.readFile(destination), payload);
 });
 
 test("archive CRC verification detects a damaged extracted shard", async (t) => {

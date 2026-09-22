@@ -88,5 +88,5 @@ When automatic updates are enabled, osChat downloads a newer verified package bu
 - Verify document, spreadsheet, presentation, and chat creation, persistence, export, and deletion.
 - Verify all agent tools still follow Files, Edits, Web, Browser, Terminal, and Computer Control permissions.
 - Confirm outbound-data and prompt-injection guards remain enabled.
-- Confirm a Small, Medium, Large, and custom model can be selected without changing the product workspace.
+- Confirm an xSmall, Small, Medium, Large, and custom model can be selected without changing the product workspace.
 - Build artifacts only with the scripts under `releaseScripts/`.

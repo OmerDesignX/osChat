@@ -19,7 +19,7 @@ const chatCollectionActions = read("src/lib/chat-collection-actions.ts");
 const chatListPreview = read("src/lib/chat-list-preview.ts");
 const chatOrder = read("src/lib/chat-order.ts");
 
-test("MLX built-in models stay in the Small, Medium, and Large selector", () => {
+test("MLX built-in models stay in the verified size selector", () => {
   assert.doesNotMatch(
     aiPanel,
     /function osCodeGgufTier[\s\S]{0,180}model\.engine !== "llamacpp"/,
@@ -97,13 +97,14 @@ test("osChat uses the shared padded pill and circular action system", () => {
   assert.match(aiPanel, /<FeatherIcon icon="cpu" size="18" \/>/);
 });
 
-test("osChat uses a chat-first shell with familiar left navigation", () => {
+test("osChat uses the flatter iOS-style chat library", () => {
   assert.match(app, /className="oschat-sidebar"/);
   assert.match(app, /className="new-chat-button"/);
-  assert.match(
-    app,
-    /className="new-chat-button"[\s\S]{0,420}className="sidebar-divider new-chat-divider"[\s\S]{0,120}<nav className="workspace-nav"/,
-  );
+  assert.doesNotMatch(app, /new-chat-divider/);
+  assert.doesNotMatch(app, /<nav className="workspace-nav"/);
+  assert.match(app, /className="collection-tabs"/);
+  assert.match(app, /className="folder-disclosure"/);
+  assert.match(app, /className="folder-list"/);
   assert.match(app, /Search chats/);
   assert.match(app, /Recent chats/);
   assert.doesNotMatch(
@@ -280,19 +281,16 @@ test("new chat refreshes and opens an empty conversation immediately", () => {
   assert.match(main, /visibleDraft/);
 });
 
-test("chat footer controls auto-hide to dark icon circles and expand accessibly", () => {
+test("chat footer controls retain visible labels and compact stable sizing", () => {
   assert.match(aiPanel, /className="ai-footer-label"/);
-  assert.match(styles, /--ai-footer-rest-fill:/);
+  const flat = read("src/desktop-flat.css");
   assert.match(
-    styles,
-    /@media \(hover: hover\) and \(pointer: fine\) and \(min-width: 521px\)/,
+    flat,
+    /@media \(hover: hover\) and \(pointer: fine\) and \(min-width: 901px\)/,
   );
-  assert.match(
-    styles,
-    /> \.ai-inline-goal:is\(:hover, :focus-within, :has\(\[aria-expanded="true"\]\)\)/,
-  );
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(main, /footer auto-hide assertions failed/);
+  assert.match(flat, /\.ai-composer-controls\.workspace\s+\.ai-footer-label/);
+  assert.match(flat, /\.ai-composer-controls\.workspace\s+\.ai-inline-goal/);
+  assert.match(main, /footer control sizing assertions failed/);
 });
 
 test("new-chat creation is idempotent and widget protocols stay out of previews", () => {
@@ -365,7 +363,7 @@ test("desktop shell exposes one main workspace window", () => {
 });
 
 test("model settings preserve verified tiers and custom local runtimes", () => {
-  assert.match(app, /\["small", "medium", "large"\]/);
+  assert.match(app, /\["xsmall", "small", "medium", "large"\]/);
   assert.match(app, /downloadOsCodeModel/);
   assert.match(app, /GGUF/);
   assert.match(app, /MLX/);

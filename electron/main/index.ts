@@ -40,6 +40,7 @@ import {
   migrateLegacyModelInstallations,
   migratedModelSelection,
   resolveVersionedModelSelection,
+  withModelArchiveFetchFallback,
 } from "./model-catalog.js";
 import { AgentControlService } from "./agent-control.js";
 import { parseGitStatus, parseTracking } from "./git-status.js";
@@ -3029,7 +3030,7 @@ async function runSmokeTest(window: BrowserWindow) {
         return {
           title: document.title,
           branded: text.includes("osChat"),
-          chats: text.includes("Chats"),
+          chatLibrary: Boolean(document.querySelector(".collection-browser, .sidebar-list")),
           notesRemoved: ![...document.querySelectorAll(".workspace-nav button")].some((button) => button.textContent?.trim().startsWith("Notes")),
           secureBridge: typeof window.oscode?.ensureChatWorkspace === "function",
           developerTerminalVisible: Boolean(document.querySelector(".terminal-panel, .terminal-dock")),
@@ -3040,7 +3041,7 @@ async function runSmokeTest(window: BrowserWindow) {
     if (
       renderer.title !== "osChat" ||
       !renderer.branded ||
-      !renderer.chats ||
+      !renderer.chatLibrary ||
       !renderer.notesRemoved ||
       !renderer.secureBridge ||
       renderer.developerTerminalVisible
@@ -3163,15 +3164,69 @@ async function runSmokeTest(window: BrowserWindow) {
     if (
       !footerControlsResult.ready ||
       restingFooterWidths.length !== 3 ||
-      restingFooterWidths.some((width) => width > 56) ||
-      Number(footerControlsResult.modelExpanded) < 270 ||
-      Number(footerControlsResult.modelCollapsed) > 56 ||
-      Number(footerControlsResult.permissionExpanded) < 240 ||
-      Number(footerControlsResult.permissionCollapsed) > 56 ||
-      Number(footerControlsResult.goalExpanded) < 120
+      restingFooterWidths[0] < 80 ||
+      restingFooterWidths[0] > 120 ||
+      restingFooterWidths[1] < 110 ||
+      restingFooterWidths[1] > 150 ||
+      restingFooterWidths[2] < 60 ||
+      restingFooterWidths[2] > 105 ||
+      Math.abs(
+        Number(footerControlsResult.modelExpanded) - restingFooterWidths[0],
+      ) > 2 ||
+      Math.abs(
+        Number(footerControlsResult.modelCollapsed) - restingFooterWidths[0],
+      ) > 2 ||
+      Math.abs(
+        Number(footerControlsResult.permissionExpanded) -
+          restingFooterWidths[1],
+      ) > 2 ||
+      Math.abs(
+        Number(footerControlsResult.permissionCollapsed) -
+          restingFooterWidths[1],
+      ) > 2 ||
+      Math.abs(
+        Number(footerControlsResult.goalExpanded) - restingFooterWidths[2],
+      ) > 2
     )
       throw new Error(
-        `footer auto-hide assertions failed: ${JSON.stringify(footerControlsResult)}`,
+        `footer control sizing assertions failed: ${JSON.stringify(footerControlsResult)}`,
+      );
+
+    const originalWindowSize = window.getSize();
+    window.setSize(1040, 720);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const compactLayout = (await window.webContents.executeJavaScript(
+      `(() => {
+        const root = document.querySelector('.oschat-app');
+        const sidebar = document.querySelector('.oschat-sidebar');
+        const main = document.querySelector('.oschat-main.chat-view');
+        const controls = document.querySelector('.ai-composer-controls.workspace');
+        const composer = document.querySelector('.ai-composer');
+        const width = document.documentElement.clientWidth;
+        const within = element => {
+          if (!element) return false;
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.left >= -1 && rect.right <= width + 1;
+        };
+        return {
+          width,
+          rootFits: within(root),
+          sidebarFits: within(sidebar),
+          mainFits: within(main),
+          controlsFit: within(controls),
+          composerFits: within(composer),
+          noPageOverflow: document.documentElement.scrollWidth <= width + 1,
+        };
+      })()`,
+      true,
+    )) as Record<string, unknown>;
+    window.setSize(originalWindowSize[0], originalWindowSize[1]);
+    if (
+      Object.values(compactLayout).some((value) => value === false) ||
+      Number(compactLayout.width) < 1000
+    )
+      throw new Error(
+        `compact chat layout failed: ${JSON.stringify(compactLayout)}`,
       );
 
     const artifactResult = (await window.webContents.executeJavaScript(
@@ -5516,6 +5571,13 @@ if (ownsSingleInstance)
     aiService = new LocalAiService({
       userData: app.getPath("userData"),
       modelsRoot: path.join(app.getPath("userData"), "models"),
+      modelArchiveFetch: withModelArchiveFetchFallback(
+        (url, init) =>
+          session
+            .fromPartition("oschat-model-download", { cache: false })
+            .fetch(url, init),
+        (url, init) => globalThis.fetch(url, init),
+      ),
       sharedModelsRoots: [
         path.join(path.dirname(app.getPath("userData")), "oscode", "models"),
       ],

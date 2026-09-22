@@ -493,7 +493,7 @@ test("model tiers are downloaded on demand from the verified ZIP catalogue", () 
   assert.match(catalogue, /Archive checksum verification failed/);
   assert.match(catalogue, /\.downloads/);
   assert.match(catalogue, /fs\.rename\(prepared, finalDirectory\)/);
-  for (const tier of ["small", "medium", "large"])
+  for (const tier of ["xsmall", "small", "medium", "large"])
     assert.match(catalogue, new RegExp(`tier: "${tier}"`));
 
   const manifest = JSON.parse(read("package.json"));

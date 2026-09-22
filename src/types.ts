@@ -5,11 +5,13 @@ export type TreeEntry = {
   children?: TreeEntry[];
 };
 export type EditorPreferences = {
-  version: 14;
+  version: 15;
   theme: "dark" | "blue-dark" | "blue-light";
   locale: "en" | "ar";
   sidebarSide: "left" | "right";
   uiScale: 1 | 1.15 | 1.3 | 1.5 | 1.7;
+  interfaceFontSize: 13 | 14 | 15;
+  interfaceFontWeight: 400 | 500 | 600;
   editorFontSize: number;
   sidebarWidth: number;
   gitHeight: number;
@@ -81,7 +83,7 @@ export type AiModel = {
   installed?: boolean;
   downloadBytes?: number;
 };
-export type AiModelTier = "small" | "medium" | "large" | "custom";
+export type AiModelTier = "xsmall" | "small" | "medium" | "large" | "custom";
 export type AiPipelineState = {
   state: "idle" | "waiting" | "running";
   label: string;

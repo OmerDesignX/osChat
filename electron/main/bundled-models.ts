@@ -8,6 +8,7 @@ import { installedModelRelease, modelVariants } from "./model-catalog.js";
 
 const exec = promisify(execFile);
 const tiers: Array<Exclude<AiModelTier, "custom">> = [
+  "xsmall",
   "small",
   "medium",
   "large",
@@ -54,11 +55,13 @@ async function directoryBytes(directory: string) {
 
 function requiredMemory(tier: Exclude<AiModelTier, "custom">, bytes: number) {
   const floor =
-    tier === "small"
-      ? 8 * 1024 ** 3
-      : tier === "medium"
-        ? 12 * 1024 ** 3
-        : 16 * 1024 ** 3;
+    tier === "xsmall"
+      ? 6 * 1024 ** 3
+      : tier === "small"
+        ? 8 * 1024 ** 3
+        : tier === "medium"
+          ? 12 * 1024 ** 3
+          : 16 * 1024 ** 3;
   return Math.max(floor, bytes * 1.35 + 3 * 1024 ** 3);
 }
 
@@ -191,6 +194,7 @@ export async function bundledModels(
     );
     if (!catalog) continue;
     for (const release of ["v2", "v1"] as const) {
+      if (tier === "xsmall" && release === "v1") continue;
       let installedPath = "";
       let installedFromOwnRoot = false;
       for (const [index, root] of roots.entries()) {
@@ -228,7 +232,7 @@ export async function bundledModels(
       const installed = Boolean(installedPath);
       results.push({
         id: `oscode:${engine}:${tier}${release === "v1" ? ":v1" : ""}`,
-        name: `osChat ${tier[0].toUpperCase()}${tier.slice(1)}${release === "v1" ? " V1" : ""}`,
+        name: `osChat ${tier === "xsmall" ? "xSmall" : tier[0].toUpperCase() + tier.slice(1)}${release === "v1" ? " V1" : ""}`,
         engine,
         path: installedPath || `catalog:${engine}:${tier}`,
         source: installed

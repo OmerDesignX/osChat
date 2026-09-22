@@ -18,13 +18,13 @@
 
 <p align="center">A private, local-first AI chat workspace.</p>
 
-osChat is allows you to run local Ai models and agents. osChat features osCode Models derived from Qwen 3.8 Max and come in Small, Medium, and Large. Small can fit on most devices with 8 GB of RAM. No data is sent to the cloud and all processing done on-device.
+osChat allows you to run local AI models and agents. osChat features osCode Models derived from Qwen 3.8 Max and available in xSmall, Small, Medium, and Large. Small can fit on most devices with 8 GB of RAM, while xSmall offers a lighter option. No data is sent to the cloud and all processing is done on-device.
 
 osChat combines a familiar conversational interface with a local agent that can research public information, create and revise files, and build interactive response widgets without requiring a cloud account.
 
 ## osCode Models
 
-- osCode Models let you run agentic AI on your computer starting with just 8 GB of RAM. You can select from Small, Medium, and Large.
+- osCode Models let you run agentic AI on your computer starting with the lighter xSmall tier. You can select from xSmall, Small, Medium, and Large.
 
 - The models are derived from Qwen 3.8 Max and are rebuilt to be smaller.
 

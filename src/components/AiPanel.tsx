@@ -53,6 +53,8 @@ type Props = {
   hideTerminalControl?: boolean;
   assistantName?: string;
   controlsPortalId?: string;
+  hideHistory?: boolean;
+  onOpenAppSettings?: () => void;
   onOpenArtifact?: (artifact: ChatArtifactPayload) => void;
   onEngine: (engine: AiEngine) => void;
   onModel: (model: string) => void;
@@ -358,6 +360,7 @@ function publicAiError(error: unknown, fallback: string) {
 function inferredTier(model: AiModel) {
   if (model.tier && model.tier !== "custom") return model.tier;
   const label = `${model.name} ${model.path}`;
+  if (/\bxsmall\b/i.test(label)) return "xsmall";
   if (/\bmedium\b/i.test(label)) return "medium";
   if (/\bsmall\b/i.test(label)) return "small";
   if (/\blarge\b/i.test(label)) return "large";
@@ -373,7 +376,7 @@ function osCodeGgufTier(model: AiModel): Exclude<AiModelTier, "custom"> | null {
     return model.tier;
   const label = `${model.name} ${model.path}`;
   const match = label.match(
-    /oscode[-_\s]+gguf[-_\s]+(small|medium|large)(?:[-_\s.]|$)/i,
+    /oscode[-_\s]+gguf[-_\s]+(xsmall|small|medium|large)(?:[-_\s.]|$)/i,
   );
   return (match?.[1]?.toLowerCase() as Exclude<AiModelTier, "custom">) || null;
 }
@@ -456,6 +459,8 @@ export function AiPanel({
   hideTerminalControl = false,
   assistantName = "osChat",
   controlsPortalId,
+  hideHistory = false,
+  onOpenAppSettings,
   onOpenArtifact,
   onEngine,
   onModel,
@@ -510,6 +515,7 @@ export function AiPanel({
   >("");
   const [status, setStatus] = useState("Ready · local only");
   const [modelsOpen, setModelsOpen] = useState(false);
+  const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [tierPickerOpen, setTierPickerOpen] = useState(false);
   const [permissionsDrawerOpen, setPermissionsDrawerOpen] = useState(
     () => !workspaceMode,
@@ -549,6 +555,7 @@ export function AiPanel({
   const [chatSearch, setChatSearch] = useState("");
   const [goalDraft, setGoalDraft] = useState("");
   const [goalMenuOpen, setGoalMenuOpen] = useState(false);
+  const [composerExpanded, setComposerExpanded] = useState(false);
   const [queueDraft, setQueueDraft] = useState("");
   const [schedulePrompt, setSchedulePrompt] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
@@ -586,6 +593,7 @@ export function AiPanel({
     setHistoryOpen(false);
     setPermissionOpen(false);
     setModelsOpen(false);
+    setMainMenuOpen(false);
     setAddMenuOpen(false);
     setOllamaPickerOpen(false);
     setCustomListOpen(false);
@@ -1245,6 +1253,7 @@ export function AiPanel({
       setHistoryOpen(false);
       setPermissionOpen(false);
       setModelsOpen(false);
+      setMainMenuOpen(false);
       setAddMenuOpen(false);
       setOllamaPickerOpen(false);
       setCustomListOpen(false);
@@ -1254,6 +1263,24 @@ export function AiPanel({
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [browserAccess, computerAccess, expanded]);
+  useEffect(() => {
+    if (!mainMenuOpen) return;
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest(".ai-main-menu, .ai-main-menu-toggle")) return;
+      setMainMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeMenu, true);
+    return () => document.removeEventListener("pointerdown", closeMenu, true);
+  }, [mainMenuOpen]);
+  useEffect(() => {
+    const textarea = composerInputRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(146, Math.max(28, textarea.scrollHeight));
+    textarea.style.height = `${nextHeight}px`;
+    setComposerExpanded(nextHeight > 42);
+  }, [input]);
   useEffect(() => {
     if (!chatTabMenuId) return;
     const closeMenu = (event: PointerEvent) => {
@@ -2347,15 +2374,17 @@ export function AiPanel({
         active={activityOpen}
         onClick={() => toggleAiPopup("activity")}
       />
-      <IconButton
-        icon="clock"
-        label="AI changes"
-        active={historyOpen}
-        onClick={() => {
-          toggleAiPopup("history");
-          void refreshHistory().catch(() => undefined);
-        }}
-      />
+      {!hideHistory && (
+        <IconButton
+          icon="clock"
+          label="AI changes"
+          active={historyOpen}
+          onClick={() => {
+            toggleAiPopup("history");
+            void refreshHistory().catch(() => undefined);
+          }}
+        />
+      )}
       <IconButton
         icon="shield"
         label="Permissions"
@@ -2365,12 +2394,18 @@ export function AiPanel({
           void refreshAgentState();
         }}
       />
-      <IconButton
-        icon="menu"
-        label="AI settings"
-        active={modelsOpen}
-        onClick={() => toggleAiPopup("models")}
-      />
+      <span className="ai-main-menu-toggle">
+        <IconButton
+          icon="menu"
+          label="Menu"
+          active={mainMenuOpen}
+          onClick={() => {
+            const shouldOpen = !mainMenuOpen;
+            closeAiPopups();
+            setMainMenuOpen(shouldOpen);
+          }}
+        />
+      </span>
       {!workspaceMode && (
         <IconButton
           icon={expanded ? "minimize-2" : "maximize-2"}
@@ -2384,6 +2419,37 @@ export function AiPanel({
       )}
     </div>
   );
+
+  const mainMenu = mainMenuOpen
+    ? createPortal(
+        <div className="ai-main-menu" role="menu" aria-label="Chat menu">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMainMenuOpen(false);
+              openAiPopup("models");
+            }}
+          >
+            <FeatherIcon icon="cpu" size="16" /> AI settings
+          </button>
+          {onOpenAppSettings && <span className="ai-main-menu-divider" />}
+          {onOpenAppSettings && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMainMenuOpen(false);
+                onOpenAppSettings();
+              }}
+            >
+              <FeatherIcon icon="settings" size="16" /> Settings
+            </button>
+          )}
+        </div>,
+        document.querySelector(".app") || document.body,
+      )
+    : null;
 
   const popoverStyle = expanded
     ? {
@@ -2411,14 +2477,20 @@ export function AiPanel({
     >
       <FeatherIcon icon="cpu" size="18" />
       <span className="ai-footer-label">
-        <b>{selectedModel?.name || "Choose a local model"}</b>
-        <small>
-          {selectedModel?.installed === false
-            ? "Download required"
-            : selectedModel
-              ? "Ready"
-              : "Small, Medium, Large, or Custom"}
-        </small>
+        <b>
+          {workspaceMode
+            ? "Model"
+            : selectedModel?.name || "Choose a local model"}
+        </b>
+        {!workspaceMode && (
+          <small>
+            {selectedModel?.installed === false
+              ? "Download required"
+              : selectedModel
+                ? "Ready"
+                : "xSmall, Small, Medium, Large, or Custom"}
+          </small>
+        )}
       </span>
       <FeatherIcon
         icon={tierPickerOpen ? "chevron-up" : "chevron-down"}
@@ -2429,7 +2501,7 @@ export function AiPanel({
 
   const renderTierPicker = (id: string) => (
     <div id={id} className="ai-tier-picker" aria-label="osChat model size">
-      {(["small", "medium", "large"] as const).map((tier) => {
+      {(["xsmall", "small", "medium", "large"] as const).map((tier) => {
         const item =
           tierModels.find(
             (entry) =>
@@ -2453,7 +2525,11 @@ export function AiPanel({
             title={item?.supportReason || `${item?.name || tier} model`}
             onClick={() => void selectBundledTier(tier)}
           >
-            <b>{tier[0].toUpperCase() + tier.slice(1)}</b>
+            <b>
+              {tier === "xsmall"
+                ? "xSmall"
+                : tier[0].toUpperCase() + tier.slice(1)}
+            </b>
             <span>
               {item?.supported === false ? (
                 "Not supported"
@@ -3224,7 +3300,10 @@ export function AiPanel({
           document.querySelector(".app") || document.body,
         )}
 
-      {historyOpen &&
+      {mainMenu}
+
+      {!hideHistory &&
+        historyOpen &&
         createPortal(
           <div
             className="ai-history-popover"
@@ -3790,7 +3869,7 @@ export function AiPanel({
               aria-label={message.role === "user" ? "You" : undefined}
             >
               {message.role === "user" ? (
-                <FeatherIcon icon="user" size="16" />
+                <span>You</span>
               ) : (
                 <>
                   <i>O</i>
@@ -3806,11 +3885,7 @@ export function AiPanel({
             {thinkingEnabled && message.thinking && (
               <details className="ai-reasoning">
                 <summary>
-                  <span>
-                    <FeatherIcon icon="cpu" size="14" />
-                    Model reasoning notes
-                  </span>
-                  <small>Expand</small>
+                  <span>Thinking</span>
                 </summary>
                 <AiMessageContent
                   content={publicAssistantText(message.thinking)}
@@ -3821,10 +3896,7 @@ export function AiPanel({
             {!!message.actions?.length && (
               <details className="ai-response-actions">
                 <summary>
-                  <span>
-                    <FeatherIcon icon="activity" size="14" />
-                    Work log
-                  </span>
+                  <span>Model log</span>
                   <small>
                     {message.actions.length} step
                     {message.actions.length === 1 ? "" : "s"}
@@ -3928,7 +4000,7 @@ export function AiPanel({
                 disabled={pipelineOccupied}
                 onClick={() => void retryLastResponse()}
               >
-                <FeatherIcon icon="refresh-cw" size="14" />
+                <FeatherIcon icon="loader" size="14" />
                 Retry response
               </button>
             </div>
@@ -3952,11 +4024,7 @@ export function AiPanel({
               {thinkingEnabled && liveModelOutput.reasoning && (
                 <details className="ai-reasoning ai-live-reasoning" open>
                   <summary>
-                    <span>
-                      <FeatherIcon icon="cpu" size="14" />
-                      Model thinking
-                    </span>
-                    <small>Live</small>
+                    <span>Thinking</span>
                   </summary>
                   <AiMessageContent
                     content={publicAssistantText(liveModelOutput.reasoning)}
@@ -3982,7 +4050,7 @@ export function AiPanel({
                 <i />
               </span>
               <span>
-                <b>Current step</b>
+                <b>Thinking</b>
                 <small>{status}</small>
               </span>
             </div>
@@ -4173,19 +4241,21 @@ export function AiPanel({
               <FeatherIcon icon="shield" size="16" />
               <span className="ai-footer-label">
                 <b>Permissions</b>
-                <small>
-                  {
-                    [
-                      fileAccess,
-                      fileAccess && editMode !== "read-only",
-                      webAccess,
-                      browserAccess,
-                      !hideTerminalControl && terminalMode === "auto",
-                      computerAccess,
-                    ].filter(Boolean).length
-                  }{" "}
-                  enabled
-                </small>
+                {!workspaceMode && (
+                  <small>
+                    {
+                      [
+                        fileAccess,
+                        fileAccess && editMode !== "read-only",
+                        webAccess,
+                        browserAccess,
+                        !hideTerminalControl && terminalMode === "auto",
+                        computerAccess,
+                      ].filter(Boolean).length
+                    }{" "}
+                    enabled
+                  </small>
+                )}
               </span>
             </span>
             <FeatherIcon
@@ -4409,9 +4479,7 @@ export function AiPanel({
               }}
             >
               <FeatherIcon icon="target" size="17" />
-              <span className="ai-footer-label">
-                {activeGoal ? "Goal set" : "Goal"}
-              </span>
+              <span className="ai-footer-label">Goal</span>
               <FeatherIcon
                 icon={goalMenuOpen ? "chevron-down" : "chevron-up"}
                 size="15"
@@ -4513,7 +4581,10 @@ export function AiPanel({
           )}
         </div>
       )}
-      <form className="ai-composer" onSubmit={send}>
+      <form
+        className={`ai-composer${composerExpanded ? " expanded-input" : ""}`}
+        onSubmit={send}
+      >
         <input
           ref={attachmentInputRef}
           className="sr-only"

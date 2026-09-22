@@ -163,6 +163,7 @@ export function App() {
   const [chatAction, setChatAction] = useState<ChatActionDialog | null>(null);
   const [chatActionSaving, setChatActionSaving] = useState(false);
   const [savedFolders, setSavedFolders] = useState<string[]>(loadChatFolders);
+  const [folderPanelOpen, setFolderPanelOpen] = useState(true);
   const [folderEditorOpen, setFolderEditorOpen] = useState(false);
   const [folderDraft, setFolderDraft] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -176,6 +177,10 @@ export function App() {
 
   const [theme, setTheme] = useState<EditorPreferences["theme"]>("dark");
   const [uiScale, setUiScale] = useState<EditorPreferences["uiScale"]>(1);
+  const [interfaceFontSize, setInterfaceFontSize] =
+    useState<EditorPreferences["interfaceFontSize"]>(13);
+  const [interfaceFontWeight, setInterfaceFontWeight] =
+    useState<EditorPreferences["interfaceFontWeight"]>(400);
   const [aiEngine, setAiEngine] = useState<AiEngine>("llamacpp");
   const [aiModel, setAiModel] = useState("");
   const [aiExecutable, setAiExecutable] = useState("");
@@ -325,6 +330,16 @@ export function App() {
         setWorkspaceRoot(workspace.root);
         setTheme(preferences.theme);
         setUiScale(preferences.uiScale);
+        setInterfaceFontSize(preferences.interfaceFontSize);
+        setInterfaceFontWeight(preferences.interfaceFontWeight);
+        document.documentElement.style.setProperty(
+          "--app-font-size",
+          `${preferences.interfaceFontSize}px`,
+        );
+        document.documentElement.style.setProperty(
+          "--app-font-weight",
+          String(preferences.interfaceFontWeight),
+        );
         setAiEngine(preferences.aiEngine);
         setModelEngine(preferences.aiEngine);
         setAiModel(preferences.aiModel);
@@ -441,6 +456,8 @@ export function App() {
           ...current,
           theme,
           uiScale,
+          interfaceFontSize,
+          interfaceFontWeight,
           aiEngine,
           aiModel,
           aiExecutable,
@@ -463,6 +480,8 @@ export function App() {
     workspaceRoot,
     theme,
     uiScale,
+    interfaceFontSize,
+    interfaceFontWeight,
     aiEngine,
     aiModel,
     aiExecutable,
@@ -691,6 +710,58 @@ export function App() {
     setFolderDraft("");
     setFolderEditorOpen(false);
   };
+  const updateInterfaceTypography = async (
+    patch: Partial<
+      Pick<EditorPreferences, "interfaceFontSize" | "interfaceFontWeight">
+    >,
+  ) => {
+    const current = await window.oscode.loadPreferences();
+    const next = { ...current, ...patch };
+    await window.oscode.savePreferences(next);
+    if (patch.interfaceFontSize) setInterfaceFontSize(patch.interfaceFontSize);
+    if (patch.interfaceFontWeight)
+      setInterfaceFontWeight(patch.interfaceFontWeight);
+    window.alert(
+      "Typography saved. Please quit and reopen osChat to apply the change.",
+    );
+    setNotice("Typography saved. Restart osChat to apply it.");
+  };
+  const duplicateFolder = (folder: string) => {
+    setItemMenu("");
+    const existing = new Set(folders.map((item) => item.toLowerCase()));
+    let copy = `${folder} copy`;
+    let suffix = 2;
+    while (existing.has(copy.toLowerCase()))
+      copy = `${folder} copy ${suffix++}`;
+    setSavedFolders((current) => [...new Set([...current, copy])]);
+    setFolderPanelOpen(true);
+    setCollectionFilter(`folder:${copy}`);
+    setNotice(`Duplicated folder as “${copy}”`);
+  };
+  const deleteFolder = async (folder: string) => {
+    setItemMenu("");
+    if (
+      !window.confirm(
+        `Delete “${folder}”? Chats in this folder will stay in your library.`,
+      )
+    )
+      return;
+    try {
+      await Promise.all(
+        agentState.chats
+          .filter((chat) => chat.folder === folder)
+          .map((chat) =>
+            patchChatCollection(window.oscode, chat, { folder: "" }),
+          ),
+      );
+      setSavedFolders((current) => current.filter((item) => item !== folder));
+      if (collectionFilter === `folder:${folder}`) setCollectionFilter("all");
+      await refreshAgentState();
+      setNotice(`Deleted folder “${folder}”`);
+    } catch (error) {
+      setNotice(errorMessage(error));
+    }
+  };
   const toggleItemMenu = (key: string, trigger: HTMLButtonElement) => {
     if (itemMenu === key) {
       setItemMenu("");
@@ -714,6 +785,11 @@ export function App() {
       hideTerminalControl
       assistantName="osChat"
       controlsPortalId="oschat-ai-controls"
+      hideHistory
+      onOpenAppSettings={() => {
+        setSettingsSection("appearance");
+        setSettingsOpen(true);
+      }}
       engine={aiEngine}
       model={aiModel}
       executable={aiExecutable}
@@ -967,18 +1043,6 @@ export function App() {
             New chat
             <span>{window.oscode.platform === "darwin" ? "⌘N" : "Ctrl N"}</span>
           </button>
-          <div className="sidebar-divider new-chat-divider" />
-          <nav className="workspace-nav" aria-label="Chats">
-            <button
-              type="button"
-              className="active"
-              onClick={() => setCollectionFilter("all")}
-            >
-              <FeatherIcon icon="message-square" size="18" />
-              Chats
-            </button>
-          </nav>
-          <div className="sidebar-divider" />
           <section className="collection-browser" aria-label="Library filters">
             <div className="collection-tabs">
               <button
@@ -996,23 +1060,37 @@ export function App() {
                 <FeatherIcon icon="star" size="15" /> Favorites
               </button>
             </div>
-            <header>
-              <span>Chat folders</span>
+            <header className="folder-browser-heading">
               <button
                 type="button"
-                aria-label="New folder"
-                title="Add a chat folder"
-                aria-expanded={folderEditorOpen}
-                aria-controls="folder-create-form"
-                onClick={() => {
-                  setFolderEditorOpen((current) => !current);
-                  setFolderDraft("");
-                }}
+                className="folder-disclosure"
+                aria-expanded={folderPanelOpen}
+                onClick={() => setFolderPanelOpen((current) => !current)}
               >
-                <FeatherIcon icon="folder-plus" size="18" />
+                <FeatherIcon
+                  icon={folderPanelOpen ? "chevron-down" : "chevron-right"}
+                  size="16"
+                />
+                <span>Chat folders</span>
               </button>
+              {folderPanelOpen && (
+                <button
+                  type="button"
+                  className="folder-add-button"
+                  aria-label="New folder"
+                  title="Add a chat folder"
+                  aria-expanded={folderEditorOpen}
+                  aria-controls="folder-create-form"
+                  onClick={() => {
+                    setFolderEditorOpen((current) => !current);
+                    setFolderDraft("");
+                  }}
+                >
+                  <FeatherIcon icon="folder-plus" size="16" />
+                </button>
+              )}
             </header>
-            {folderEditorOpen && (
+            {folderPanelOpen && folderEditorOpen && (
               <form
                 id="folder-create-form"
                 className="folder-create-form"
@@ -1051,24 +1129,61 @@ export function App() {
                 </button>
               </form>
             )}
-            <div
-              className="folder-strip horizontal-menu-scroll"
-              data-horizontal-menu
-            >
-              {folders.map((folder) => (
-                <button
-                  type="button"
-                  key={folder}
-                  className={
-                    collectionFilter === `folder:${folder}` ? "active" : ""
-                  }
-                  onClick={() => setCollectionFilter(`folder:${folder}`)}
-                >
-                  <FeatherIcon icon="folder" size="14" /> {folder}
-                </button>
-              ))}
-              {!folders.length && <small>Create folders for your chats.</small>}
-            </div>
+            {folderPanelOpen && (
+              <div className="folder-list">
+                {folders.map((folder) => (
+                  <div
+                    className={
+                      collectionFilter === `folder:${folder}` ? "active" : ""
+                    }
+                    key={folder}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setCollectionFilter(`folder:${folder}`)}
+                    >
+                      <FeatherIcon icon="folder" size="14" />
+                      <span>{folder}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="item-more"
+                      aria-label={`Options for ${folder}`}
+                      onClick={(event) =>
+                        toggleItemMenu(`folder:${folder}`, event.currentTarget)
+                      }
+                    >
+                      <FeatherIcon icon="more-horizontal" size="16" />
+                    </button>
+                    {itemMenu === `folder:${folder}` &&
+                      createPortal(
+                        <div
+                          className="sidebar-item-menu sidebar-item-menu-portal"
+                          style={itemMenuPosition}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => duplicateFolder(folder)}
+                          >
+                            <FeatherIcon icon="copy" size="15" /> Duplicate
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => void deleteFolder(folder)}
+                          >
+                            <FeatherIcon icon="trash-2" size="15" /> Delete
+                          </button>
+                        </div>,
+                        document.querySelector(".oschat-app") || document.body,
+                      )}
+                  </div>
+                ))}
+                {!folders.length && (
+                  <small>Create folders for your chats.</small>
+                )}
+              </div>
+            )}
           </section>
           <section className="sidebar-list">
             <header>
@@ -1174,12 +1289,6 @@ export function App() {
               )}
             </div>
           </section>
-          <footer>
-            <button type="button" onClick={() => setSettingsOpen(true)}>
-              <FeatherIcon icon="settings" size="17" />
-              Settings
-            </button>
-          </footer>
         </aside>
         <main className="oschat-main chat-view">{sharedAi}</main>
       </div>
@@ -1307,6 +1416,14 @@ export function App() {
           setTheme={setTheme}
           uiScale={uiScale}
           setUiScale={setUiScale}
+          interfaceFontSize={interfaceFontSize}
+          interfaceFontWeight={interfaceFontWeight}
+          setInterfaceFontSize={(value) =>
+            void updateInterfaceTypography({ interfaceFontSize: value })
+          }
+          setInterfaceFontWeight={(value) =>
+            void updateInterfaceTypography({ interfaceFontWeight: value })
+          }
           models={models}
           engine={modelEngine}
           setEngine={setModelEngine}
@@ -1371,6 +1488,12 @@ type SettingsProps = {
   setTheme: (theme: EditorPreferences["theme"]) => void;
   uiScale: EditorPreferences["uiScale"];
   setUiScale: (scale: EditorPreferences["uiScale"]) => void;
+  interfaceFontSize: EditorPreferences["interfaceFontSize"];
+  interfaceFontWeight: EditorPreferences["interfaceFontWeight"];
+  setInterfaceFontSize: (size: EditorPreferences["interfaceFontSize"]) => void;
+  setInterfaceFontWeight: (
+    weight: EditorPreferences["interfaceFontWeight"],
+  ) => void;
   models: AiModel[];
   engine: AiEngine;
   setEngine: (engine: AiEngine) => void;
@@ -1496,6 +1619,45 @@ function SettingsDialog(props: SettingsProps) {
                   <option value={1.7}>170%</option>
                 </select>
               </SettingGroup>
+              <SettingGroup
+                title="Interface typography"
+                description="Font size and thickness apply after osChat restarts."
+              >
+                <label className="flat-setting-row">
+                  <span>Font size</span>
+                  <select
+                    value={props.interfaceFontSize}
+                    onChange={(event) =>
+                      props.setInterfaceFontSize(
+                        Number(
+                          event.target.value,
+                        ) as EditorPreferences["interfaceFontSize"],
+                      )
+                    }
+                  >
+                    <option value={13}>Compact</option>
+                    <option value={14}>Standard</option>
+                    <option value={15}>Large</option>
+                  </select>
+                </label>
+                <label className="flat-setting-row">
+                  <span>Font thickness</span>
+                  <select
+                    value={props.interfaceFontWeight}
+                    onChange={(event) =>
+                      props.setInterfaceFontWeight(
+                        Number(
+                          event.target.value,
+                        ) as EditorPreferences["interfaceFontWeight"],
+                      )
+                    }
+                  >
+                    <option value={400}>Regular</option>
+                    <option value={500}>Medium</option>
+                    <option value={600}>Semibold</option>
+                  </select>
+                </label>
+              </SettingGroup>
             </div>
           )}
           {props.section === "models" && (
@@ -1511,33 +1673,39 @@ function SettingsDialog(props: SettingsProps) {
                 description="Download one verified tier at a time from the shared osCode model repository."
               >
                 <div className="model-tier-grid">
-                  {(["small", "medium", "large"] as const).map((tier) => {
-                    const model = props.models.find(
-                      (item) => item.tier === tier,
-                    );
-                    return (
-                      <button
-                        type="button"
-                        key={tier}
-                        disabled={
-                          Boolean(props.downloadingTier) ||
-                          model?.supported === false
-                        }
-                        onClick={() => void props.downloadTier(tier)}
-                      >
-                        <b>{tier[0].toUpperCase() + tier.slice(1)}</b>
-                        <span>
-                          {model?.installed
-                            ? "Ready"
-                            : props.downloadingTier === tier
-                              ? "Downloading…"
-                              : model?.supported === false
-                                ? "Not supported"
-                                : "Download"}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {(["xsmall", "small", "medium", "large"] as const).map(
+                    (tier) => {
+                      const model = props.models.find(
+                        (item) => item.tier === tier,
+                      );
+                      return (
+                        <button
+                          type="button"
+                          key={tier}
+                          disabled={
+                            Boolean(props.downloadingTier) ||
+                            model?.supported === false
+                          }
+                          onClick={() => void props.downloadTier(tier)}
+                        >
+                          <b>
+                            {tier === "xsmall"
+                              ? "xSmall"
+                              : tier[0].toUpperCase() + tier.slice(1)}
+                          </b>
+                          <span>
+                            {model?.installed
+                              ? "Ready"
+                              : props.downloadingTier === tier
+                                ? "Downloading…"
+                                : model?.supported === false
+                                  ? "Not supported"
+                                  : "Download"}
+                          </span>
+                        </button>
+                      );
+                    },
+                  )}
                 </div>
               </SettingGroup>
               {props.models.some(

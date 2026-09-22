@@ -1,0 +1,1047 @@
+/* Desktop companion to osChat iOS's quiet, flat visual language.
+   Keep this last so the established layout and feature-specific rules survive. */
+.oschat-app {
+  --accent-fill: #89cff0;
+  --oschat-control-height: 42px;
+  --oschat-large-control-height: 44px;
+  --oschat-circle-size: 42px;
+  --oschat-card-radius: 14px;
+  --oschat-panel-radius: 18px;
+  --oschat-control-fill: var(--panel);
+  --oschat-hover-fill: var(--panel2);
+  --oschat-selected-fill: color-mix(
+    in srgb,
+    var(--panel2) 88%,
+    var(--accent) 12%
+  );
+}
+
+/* Retain the stored blue-light theme key while presenting the iOS Paper Light palette. */
+.oschat-app.blue-light {
+  --bg: #ffffff;
+  --topbar: #ffffff;
+  --panel: #f1f3f5;
+  --panel2: #e9edf0;
+  --text: #20292e;
+  --muted: #68747b;
+  --line: #e1e6e9;
+  --accent: #397b9d;
+  --accent2: #8ac9e8;
+  --accent-fill: #8ac9e8;
+  --onaccent: #142b38;
+  --selector-bg: #eef2f4;
+  --selector-active-bg: #dcebf2;
+  --selector-active-text: #285f7a;
+  --terminal-bg: #ffffff;
+  --terminal-surface: #f1f3f5;
+  --terminal-text: #20292e;
+  --terminal-muted: #68747b;
+  --chat-bg: #ffffff;
+  --chat-assistant: #ffffff;
+  --chat-user: #eef4f7;
+  --overlay-surface: #ffffff;
+  --overlay-scrim: rgb(32 41 46 / 34%);
+  --oschat-control-fill: #f1f3f5;
+  --oschat-hover-fill: #e9edf0;
+  --oschat-selected-fill: #e9edf0;
+}
+
+/* A single surface and fine separators replace stacked, floating cards. */
+.oschat-app .oschat-topbar,
+.oschat-app .oschat-sidebar,
+.oschat-app .ai-chat-tab-strip,
+.oschat-app .oschat-main.chat-view > .ai-panel.workspace-mode {
+  box-shadow: none !important;
+}
+.oschat-app .oschat-topbar {
+  border-bottom: 1px solid var(--line);
+  background: var(--topbar);
+}
+.oschat-app .oschat-sidebar {
+  padding: 12px 10px;
+  border-right: 1px solid var(--line);
+  background: var(--topbar);
+}
+.oschat-app .oschat-global-search {
+  height: 42px;
+  border: 1px solid var(--line) !important;
+  border-radius: 12px !important;
+  background: var(--panel);
+}
+.oschat-app .oschat-global-search:focus-within {
+  border-color: var(--accent) !important;
+  background: var(--panel);
+}
+.oschat-app .oschat-top-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--line);
+}
+.oschat-app .new-chat-button {
+  min-height: 42px;
+  background: var(--accent-fill) !important;
+  color: var(--onaccent) !important;
+}
+.oschat-app .workspace-nav button,
+.oschat-app .oschat-sidebar footer button,
+.oschat-app .collection-tabs button,
+.oschat-app .folder-strip button {
+  min-height: 38px;
+  padding-inline: 12px;
+  border-radius: 11px !important;
+}
+.oschat-app .collection-tabs,
+.oschat-app .folder-strip {
+  gap: 5px;
+}
+.oschat-app .sidebar-list {
+  gap: 2px;
+}
+.oschat-app .sidebar-list article,
+.oschat-app .sidebar-list article > button:first-child {
+  border-radius: 11px !important;
+}
+.oschat-app .sidebar-list article > button:first-child {
+  min-height: 55px;
+  padding-block: 9px;
+}
+
+/* Messages read on the canvas; only the user's message needs a bubble. */
+.oschat-app .oschat-main.chat-view .ai-conversation {
+  padding-inline: max(20px, calc((100% - 880px) / 2));
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+.oschat-app .oschat-main.chat-view .ai-message {
+  max-width: 880px;
+  margin-bottom: 14px;
+  box-shadow: none !important;
+}
+.oschat-app .oschat-main.chat-view .ai-message.assistant {
+  padding: 8px 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+}
+.oschat-app .oschat-main.chat-view .ai-message.user {
+  width: fit-content;
+  max-width: min(78%, 680px);
+  margin-left: auto;
+  padding: 11px 15px;
+  border: 0 !important;
+  border-radius: 16px 16px 5px 16px;
+  background: var(--chat-user) !important;
+}
+.oschat-app .oschat-main.chat-view .ai-empty b {
+  font-size: clamp(23px, 2.5vw, 31px);
+}
+.oschat-app .oschat-main.chat-view .ai-empty-brand {
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.oschat-app .oschat-main.chat-view .ai-empty-brand > img {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+.oschat-app .oschat-main.chat-view .ai-empty-wordmark {
+  font-size: 28px;
+}
+.oschat-app .ai-starter-grid {
+  gap: 7px;
+}
+.oschat-app .ai-starter-grid button {
+  min-height: 56px;
+  border-color: var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+/* The composer gets a tray and a compact, always-readable control row. */
+.oschat-app .ai-panel.workspace-mode {
+  --composer-tray: #101213;
+}
+.oschat-app.blue-dark .ai-panel.workspace-mode {
+  --composer-tray: #050b14;
+}
+.oschat-app.blue-light .ai-panel.workspace-mode {
+  --composer-tray: #e9edf0;
+}
+.oschat-app .oschat-main.chat-view .ai-composer-controls.workspace {
+  width: min(880px, calc(100% - 32px));
+  min-height: 42px;
+  gap: 7px;
+  margin-top: 6px;
+}
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls.workspace
+  .ai-inline-goal {
+  margin-left: 0;
+}
+.oschat-app .oschat-main.chat-view .ai-composer {
+  width: min(880px, calc(100% - 32px));
+  min-height: 66px;
+  margin: 8px auto 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--line) !important;
+  border-radius: 21px !important;
+  background: var(--panel) !important;
+  box-shadow: none !important;
+}
+.oschat-app .oschat-main.chat-view .ai-composer textarea {
+  min-width: 0;
+  min-height: 46px;
+  padding: 9px 4px;
+}
+.oschat-app .oschat-main.chat-view .ai-composer > button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+}
+.oschat-app .ai-attachments {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.oschat-app .oschat-main.chat-view .ai-context {
+  margin-bottom: 9px;
+}
+.oschat-app .ai-chat-tab-strip {
+  gap: 5px;
+  padding: 7px 12px;
+  background: var(--topbar);
+}
+.oschat-app .ai-chat-tab {
+  height: 38px;
+  min-width: 120px;
+  border-radius: 11px;
+  background: var(--panel);
+}
+.oschat-app .ai-chat-tab.active {
+  background: var(--oschat-selected-fill);
+}
+
+/* Menus and settings follow the same thin-border, short-radius treatment. */
+.oschat-app
+  :where(
+    .sidebar-item-menu,
+    .ai-chat-tab-menu,
+    .oschat-notification-panel,
+    .ai-model-popover,
+    .ai-permission-popover,
+    .ai-agent-popover,
+    .ai-history-popover,
+    .ai-tier-picker,
+    .ai-inline-goal-popover,
+    .ai-capability-bar.ai-capability-popover
+  ) {
+  border: 1px solid var(--line) !important;
+  border-radius: 16px !important;
+  background: var(--overlay-surface) !important;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 16%) !important;
+}
+.oschat-app :where(.sidebar-item-menu button, .notification-list article) {
+  border-radius: 10px;
+}
+.oschat-app .oschat-main.chat-view .ai-composer-controls > .ai-tier-picker,
+.oschat-app
+  > .ai-capability-popover-layer
+  > .ai-capability-bar.ai-capability-popover {
+  border: 1px solid var(--line) !important;
+  border-radius: 16px !important;
+  background: var(--overlay-surface) !important;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 16%) !important;
+}
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls
+  > .ai-tier-picker
+  > button,
+.oschat-app
+  .ai-capability-bar.ai-capability-popover
+  > .ai-capability-grid
+  > button {
+  border-radius: 11px !important;
+}
+.oschat-app .oschat-settings {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: none;
+}
+.oschat-app .oschat-settings > aside {
+  padding: 16px 12px;
+  border-right: 1px solid var(--line);
+}
+.oschat-app .oschat-settings > aside nav {
+  gap: 3px;
+}
+.oschat-app .oschat-settings > aside nav button {
+  min-height: 40px;
+  border-radius: 10px;
+}
+.oschat-app .oschat-settings > main > header {
+  min-height: 68px;
+  padding: 12px 20px;
+}
+.oschat-app .settings-section {
+  gap: 9px;
+  padding: 20px;
+}
+.oschat-app :where(.setting-group, .setting-toggle, .settings-callout) {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--bg);
+}
+.oschat-app .setting-group {
+  padding: 16px;
+}
+.oschat-app
+  :where(
+    .theme-grid button,
+    .model-tier-grid button,
+    .settings-model-list article
+  ) {
+  border: 1px solid var(--line) !important;
+  border-radius: 11px !important;
+  background: var(--panel);
+}
+.oschat-app :where(.setting-group select, .custom-model-actions select) {
+  min-height: 42px;
+  border: 1px solid var(--line) !important;
+  border-radius: 11px !important;
+  background-color: var(--panel);
+}
+
+/* On broad panes the iOS-style labels stay visible; on smaller panes the
+   established horizontally scrollable icon rail remains available. */
+@media (hover: hover) and (pointer: fine) and (min-width: 901px) {
+  .oschat-app .oschat-main.chat-view .ai-composer-controls.workspace {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-tier-toggle {
+    width: min(235px, 34%) !important;
+    min-width: 170px !important;
+    max-width: 235px !important;
+    height: 42px;
+    grid-template-columns: 20px minmax(0, 1fr) 16px;
+    gap: 8px;
+    padding-inline: 12px;
+  }
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-capability-drawer {
+    width: 155px;
+    min-width: 155px;
+    max-width: 155px;
+  }
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-capability-drawer
+    > .ai-capability-toggle {
+    height: 42px;
+    grid-template-columns: minmax(0, 1fr) 16px;
+    gap: 5px;
+    padding-inline: 11px;
+  }
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-capability-drawer
+    > .ai-capability-toggle
+    > span {
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 7px;
+  }
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-inline-goal {
+    width: 93px;
+    min-width: 93px;
+    max-width: 93px;
+  }
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-inline-goal
+    > button {
+    height: 42px;
+    grid-template-columns: 18px minmax(0, 1fr) 14px;
+    gap: 5px;
+    padding-inline: 10px;
+  }
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    .ai-footer-label,
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-tier-toggle
+    > svg:last-child,
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-capability-drawer
+    > .ai-capability-toggle
+    > svg,
+  .oschat-app
+    .oschat-main.chat-view
+    .ai-composer-controls.workspace
+    > .ai-inline-goal
+    > button
+    > svg:last-child {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@media (max-width: 900px) {
+  .oschat-app .oschat-main.chat-view .ai-conversation {
+    padding-inline: 16px;
+  }
+  .oschat-app .oschat-main.chat-view .ai-composer-controls.workspace {
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: thin;
+  }
+  .oschat-app .ai-starter-grid {
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .oschat-app .oschat-topbar {
+    gap: 5px;
+  }
+  .oschat-app .oschat-main.chat-view .ai-composer {
+    width: calc(100% - 20px);
+  }
+  .oschat-app .oschat-main.chat-view .ai-composer-controls.workspace {
+    width: calc(100% - 20px);
+  }
+  .oschat-app .oschat-main.chat-view .ai-message.user {
+    max-width: 92%;
+  }
+}
+
+/* iOS-aligned desktop refinement: quieter type, flatter lists, and controls
+   that disclose complexity only when they are opened. */
+.oschat-app {
+  --app-font-size: 13px;
+  --app-font-weight: 400;
+  font-size: var(--app-font-size);
+  font-weight: var(--app-font-weight);
+}
+.oschat-app :where(button, input, textarea, select) {
+  font-family: inherit;
+  font-size: var(--app-font-size);
+}
+.oschat-app :where(button, input, textarea, select, p, small, span) {
+  font-weight: var(--app-font-weight);
+}
+.oschat-app :where(b, strong) {
+  font-weight: 600;
+}
+
+/* Header and chat tabs */
+.oschat-app .oschat-global-search {
+  border-radius: 999px !important;
+  padding-inline: 15px;
+}
+.oschat-app .ai-chat-tab-strip {
+  gap: 8px;
+  padding-block: 8px;
+}
+.oschat-app .ai-chat-tab {
+  min-width: 150px;
+  height: 38px;
+  padding-inline: 14px 7px;
+  border-radius: 999px !important;
+}
+.oschat-app .ai-chat-tab > .ai-chat-tab-more,
+.oschat-app .ai-chat-tab > .ai-chat-tab-more:hover,
+.oschat-app .ai-chat-tab > .ai-chat-tab-more:focus-visible {
+  width: 32px;
+  height: 32px;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app .ai-chat-tab-menu,
+.oschat-app .sidebar-item-menu {
+  padding: 7px;
+  border-radius: 18px !important;
+}
+.oschat-app :where(.ai-chat-tab-menu, .sidebar-item-menu) > button {
+  min-height: 42px;
+  border-radius: 11px !important;
+}
+
+/* Sidebar library */
+.oschat-app .oschat-sidebar {
+  gap: 0;
+  padding: 12px 10px 8px;
+}
+.oschat-app .new-chat-button {
+  margin-bottom: 14px;
+  border-radius: 999px !important;
+}
+.oschat-app .collection-browser {
+  border-top: 0 !important;
+}
+.oschat-app .collection-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: 0 4px 13px;
+  padding: 4px;
+  border: 0 !important;
+  border-radius: 999px;
+  background: var(--panel);
+}
+.oschat-app .collection-tabs button {
+  min-height: 36px;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: transparent !important;
+}
+.oschat-app .collection-tabs button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent) !important;
+}
+.oschat-app .folder-browser-heading {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding-inline: 3px;
+}
+.oschat-app .folder-browser-heading > button {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+.oschat-app .folder-disclosure {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 7px;
+  color: var(--text);
+  background: transparent !important;
+}
+.oschat-app .folder-add-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 0 !important;
+  color: var(--muted);
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app .folder-create-form {
+  margin: 3px 4px 8px;
+  border-radius: 999px;
+  background: var(--panel);
+}
+.oschat-app .folder-list {
+  display: grid;
+  margin: 0 4px 10px;
+}
+.oschat-app .folder-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  min-height: 42px;
+  border-bottom: 1px solid var(--line);
+}
+.oschat-app .folder-list > div > button:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 41px;
+  padding-inline: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+.oschat-app .folder-list > div > button:first-child span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oschat-app .folder-list > div.active > button:first-child {
+  color: var(--accent);
+}
+.oschat-app .folder-list .item-more {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+}
+.oschat-app .folder-list > small {
+  padding: 9px 8px 13px;
+  color: var(--muted);
+}
+.oschat-app .sidebar-list {
+  min-height: 0;
+  gap: 0;
+}
+.oschat-app .sidebar-list > header {
+  min-height: 38px;
+  padding: 4px 12px;
+}
+.oschat-app .sidebar-list > div {
+  gap: 0 !important;
+}
+.oschat-app .sidebar-list article,
+.oschat-app .sidebar-list article:hover,
+.oschat-app .sidebar-list article.active {
+  min-height: 60px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.oschat-app .sidebar-list article > button:first-child {
+  min-height: 59px;
+  padding: 9px 44px 9px 12px;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.oschat-app .sidebar-list article.active b,
+.oschat-app .sidebar-list article.active .chat-favorite-toggle {
+  color: var(--accent);
+}
+.oschat-app .sidebar-list article > .item-more,
+.oschat-app .sidebar-list article > .chat-favorite-toggle {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* iOS-style composer controls: plain labels, then a capsule that expands. */
+.oschat-app .oschat-main.chat-view .ai-composer-controls.workspace {
+  gap: 16px;
+  min-height: 42px;
+  margin-top: 7px;
+  overflow: visible;
+}
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls.workspace
+  > .ai-tier-toggle,
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls.workspace
+  .ai-capability-toggle,
+.oschat-app .oschat-main.chat-view .ai-inline-goal > button {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 42px !important;
+  min-height: 42px;
+  padding: 0 4px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: var(--accent);
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls.workspace
+  .ai-capability-drawer,
+.oschat-app .oschat-main.chat-view .ai-inline-goal {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls.workspace
+  .ai-inline-goal {
+  margin-left: auto;
+}
+.oschat-app .oschat-main.chat-view .ai-composer-controls .ai-tier-toggle small,
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls
+  .ai-capability-toggle
+  small,
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls
+  .ai-tier-toggle
+  > svg:last-child,
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls
+  .ai-capability-toggle
+  > svg,
+.oschat-app .oschat-main.chat-view .ai-inline-goal > button > svg:last-child {
+  display: none !important;
+}
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls
+  .ai-tier-toggle
+  .ai-footer-label,
+.oschat-app
+  .oschat-main.chat-view
+  .ai-composer-controls
+  .ai-capability-toggle
+  .ai-footer-label,
+.oschat-app .oschat-main.chat-view .ai-inline-goal .ai-footer-label {
+  display: inline !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.oschat-app .oschat-main.chat-view .ai-composer {
+  min-height: 58px;
+  padding: 8px 9px;
+  border-radius: 999px !important;
+  align-items: center;
+  transition:
+    border-radius 160ms ease,
+    min-height 160ms ease;
+}
+.oschat-app .oschat-main.chat-view .ai-composer.expanded-input {
+  min-height: 72px;
+  border-radius: 22px !important;
+}
+.oschat-app .oschat-main.chat-view .ai-composer textarea {
+  min-height: 28px;
+  max-height: 146px;
+  padding: 5px 6px;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.45;
+}
+.oschat-app .oschat-main.chat-view .ai-composer > button {
+  align-self: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 50% !important;
+}
+
+/* Top-right hamburger menu */
+.ai-main-menu {
+  position: fixed;
+  z-index: 130;
+  top: max(68px, env(titlebar-area-height, 0px));
+  right: 14px;
+  display: grid;
+  width: min(230px, calc(100vw - 28px));
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--overlay-surface);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 18%);
+}
+.ai-main-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 43px;
+  padding-inline: 12px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+.ai-main-menu > button:hover {
+  background: var(--panel);
+}
+.ai-main-menu-divider {
+  height: 1px;
+  margin: 5px 7px;
+  background: var(--line);
+}
+
+/* Flat permission and model managers */
+.oschat-app :where(.ai-permission-popover, .ai-model-popover) {
+  background: var(--overlay-surface) !important;
+}
+.oschat-app :where(.ai-permission-body, .ai-model-manager) {
+  background: transparent !important;
+}
+.oschat-app .ai-permission-popover .ai-permission-tools {
+  padding: 12px 16px;
+  background: transparent !important;
+}
+.oschat-app .ai-permission-popover .ai-permission-tools > label {
+  border-radius: 999px !important;
+  background: var(--panel) !important;
+}
+.oschat-app .ai-permission-popover .ai-permission-tools > button {
+  border-radius: 999px !important;
+  background: var(--panel) !important;
+}
+.oschat-app .ai-permission-popover .ai-permission-list,
+.oschat-app .ai-model-popover .ai-model-table {
+  padding-inline: 16px;
+  background: transparent !important;
+}
+.oschat-app .ai-permission-popover .ai-permission-row,
+.oschat-app .ai-model-popover .ai-model-row,
+.oschat-app .ai-model-popover .ai-setting-row {
+  min-height: 58px;
+  margin: 0 !important;
+  padding: 10px 4px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app .ai-model-popover .ai-hardware-note,
+.oschat-app .ai-model-popover .ai-engine-note {
+  margin: 0 16px;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* Settings use one canvas and divider-based rows, like the iOS sheet. */
+.oschat-app .oschat-settings {
+  background: var(--overlay-surface);
+}
+.oschat-app .oschat-settings > aside,
+.oschat-app .oschat-settings > main,
+.oschat-app .oschat-settings > main > header {
+  background: var(--overlay-surface) !important;
+}
+.oschat-app .oschat-settings > aside nav button {
+  border-radius: 999px !important;
+  background: transparent;
+}
+.oschat-app .oschat-settings > aside nav button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.oschat-app .settings-section {
+  gap: 0;
+  width: min(760px, 100%);
+  margin-inline: auto;
+}
+.oschat-app :where(.setting-group, .setting-toggle, .settings-callout) {
+  margin: 0;
+  padding: 18px 0;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app .theme-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+.oschat-app .theme-grid button {
+  min-height: 50px;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.oschat-app .flat-setting-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 48%);
+  align-items: center;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+.oschat-app .flat-setting-row:last-child {
+  border-bottom: 0;
+}
+.oschat-app .flat-setting-row select {
+  min-height: 38px;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: var(--panel);
+}
+
+@media (max-width: 700px) {
+  .oschat-app .flat-setting-row {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding-block: 9px;
+  }
+}
+
+/* Desktop hover feedback is color-only: keep the flat canvas visible. */
+@media (hover: hover) and (pointer: fine) {
+  #root
+    .oschat-app
+    :where(button, a, summary, [role="button"]):hover:not(:disabled) {
+    color: var(--accent) !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+  }
+  #root .oschat-app .sidebar-list article:hover,
+  #root .oschat-app :where(.chat-tab, .folder-row, .permission-row):hover {
+    background-color: transparent !important;
+  }
+  #root .oschat-app .sidebar-list article:hover > button:first-child {
+    color: var(--accent) !important;
+  }
+  #root .oschat-app :where(.danger, [data-danger]):hover:not(:disabled) {
+    color: var(--danger) !important;
+  }
+}
+
+/* The desktop transcript follows the iOS hierarchy: plain messages and
+   disclosure chevrons, without cards nested inside cards. */
+.oschat-app .oschat-main.chat-view .ai-message.user {
+  padding: 8px 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app .ai-message-author.user-only {
+  justify-content: flex-end;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.oschat-app .ai-message :is(.ai-reasoning, .ai-response-actions),
+.oschat-app .ai-live-model-output,
+.oschat-app .ai-live-work {
+  overflow: visible;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app .ai-message :is(.ai-reasoning, .ai-response-actions) {
+  margin: 8px 0 !important;
+  padding: 0 !important;
+}
+.oschat-app .ai-message :is(.ai-reasoning, .ai-response-actions) > summary,
+.oschat-app .ai-action-output > summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 34px !important;
+  padding: 3px 0 !important;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px !important;
+  font-weight: 500;
+}
+.oschat-app
+  .ai-message
+  :is(.ai-reasoning, .ai-response-actions)
+  > summary::-webkit-details-marker,
+.oschat-app .ai-action-output > summary::-webkit-details-marker {
+  display: none;
+}
+.oschat-app
+  .ai-message
+  :is(.ai-reasoning, .ai-response-actions)
+  > summary::before,
+.oschat-app .ai-action-output > summary::before {
+  content: "›";
+  width: 14px;
+  flex: 0 0 14px;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  transform-origin: center;
+  transition: transform 140ms ease;
+}
+.oschat-app
+  .ai-message
+  :is(.ai-reasoning, .ai-response-actions)[open]
+  > summary::before,
+.oschat-app .ai-action-output[open] > summary::before {
+  transform: rotate(90deg);
+}
+.oschat-app
+  .ai-message
+  :is(.ai-reasoning, .ai-response-actions)
+  > summary
+  small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px !important;
+}
+.oschat-app .ai-message .ai-reasoning > :not(summary),
+.oschat-app .ai-message .ai-response-actions > .ai-action-timeline {
+  margin: 0 !important;
+  padding: 5px 0 5px 22px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+.oschat-app .ai-action-timeline {
+  gap: 0 !important;
+}
+.oschat-app .ai-action-card {
+  padding: 10px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.oschat-app .ai-action-card:last-child {
+  border-bottom: 0 !important;
+}
+.oschat-app .ai-action-icon {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.oschat-app .ai-action-output {
+  margin-top: 6px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.oschat-app .ai-action-output pre {
+  padding: 4px 0 8px 22px;
+  background: transparent;
+}
+.oschat-app .ai-live-work {
+  margin: 0 12px 12px;
+  padding: 0;
+}
+.oschat-app .ai-live-work .ai-thinking {
+  min-height: 42px;
+  padding: 5px 0;
+  border: 0 !important;
+  background: transparent !important;
+}

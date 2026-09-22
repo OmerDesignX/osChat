@@ -9,11 +9,13 @@ export function defaultAiHardware(
 }
 
 export const defaultPreferences: EditorPreferences = {
-  version: 14,
+  version: 15,
   theme: "dark",
   locale: "en",
   sidebarSide: "left",
   uiScale: 1,
+  interfaceFontSize: 13,
+  interfaceFontWeight: 400,
   editorFontSize: 14,
   sidebarWidth: 480,
   gitHeight: 390,
@@ -69,7 +71,7 @@ export function validPreferences(
       ? "cpu"
       : savedHardware || defaultAiHardware(platform, arch);
   return {
-    version: 14,
+    version: 15,
     theme:
       input.theme === "blue-dark" || input.theme === "blue-light"
         ? input.theme
@@ -83,6 +85,18 @@ export function validPreferences(
       [1, 1.15, 1.3, 1.5, 1.7].includes(Number(input.uiScale))
         ? (input.uiScale as EditorPreferences["uiScale"])
         : 1,
+    interfaceFontSize: [13, 14, 15].includes(Number(input.interfaceFontSize))
+      ? (Number(
+          input.interfaceFontSize,
+        ) as EditorPreferences["interfaceFontSize"])
+      : 13,
+    interfaceFontWeight: [400, 500, 600].includes(
+      Number(input.interfaceFontWeight),
+    )
+      ? (Number(
+          input.interfaceFontWeight,
+        ) as EditorPreferences["interfaceFontWeight"])
+      : 400,
     editorFontSize:
       Number.isInteger(input.editorFontSize) &&
       Number(input.editorFontSize) >= 12 &&

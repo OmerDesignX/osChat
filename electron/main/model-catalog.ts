@@ -20,6 +20,52 @@ type Variant = {
   shards: number;
 };
 
+export type ModelArchiveFetch = (
+  input: string,
+  init?: RequestInit,
+) => Promise<Response>;
+
+export function withModelArchiveFetchFallback(
+  primary: ModelArchiveFetch,
+  fallback: ModelArchiveFetch,
+): ModelArchiveFetch {
+  return async (input, init) => {
+    let primaryError: unknown;
+    try {
+      const response = await primary(input, init);
+      // Missing or retired archives are definitive. Other failures can be
+      // transport-specific (Chromium session, proxy, TLS, or HTTP/2), so give
+      // the platform-independent Node transport one chance before retrying.
+      if (response.ok || response.status === 404 || response.status === 410)
+        return response;
+      primaryError = new Error(
+        `Electron model transport returned ${response.status}`,
+      );
+      await response.body?.cancel().catch(() => undefined);
+    } catch (error) {
+      if (init?.signal?.aborted) throw error;
+      primaryError = error;
+    }
+    try {
+      return await fallback(input, init);
+    } catch (error) {
+      if (init?.signal?.aborted) throw error;
+      const primaryMessage =
+        primaryError instanceof Error
+          ? primaryError.message
+          : "Electron model transport failed";
+      const fallbackMessage =
+        error instanceof Error ? error.message : "Node model transport failed";
+      throw new Error(
+        `${primaryMessage}; fallback failed: ${fallbackMessage}`,
+        {
+          cause: error,
+        },
+      );
+    }
+  };
+}
+
 export const modelRepository = "https://models.omerdesign.com/oscode-models";
 export const defaultModelRelease: ModelRelease = "v2";
 
@@ -140,7 +186,7 @@ export async function resolveVersionedModelSelection(
 // Published Content-Length values: reject truncated or silently replaced archives.
 const archiveBytes: Record<
   ModelRelease,
-  Record<CatalogRuntime, Record<DownloadableTier, number>>
+  Record<CatalogRuntime, Partial<Record<DownloadableTier, number>>>
 > = {
   v1: {
     llamacpp: {
@@ -152,15 +198,29 @@ const archiveBytes: Record<
   },
   v2: {
     llamacpp: {
+      xsmall: 1_420_405_464,
       small: 2_915_090_775,
       medium: 3_721_827_190,
       large: 4_656_349_013,
     },
-    mlx: { small: 3_034_570_654, medium: 3_798_962_462, large: 4_585_902_742 },
+    mlx: {
+      xsmall: 1_129_042_637,
+      small: 3_034_570_654,
+      medium: 3_798_962_462,
+      large: 4_585_902_742,
+    },
   },
 };
 
 export const modelVariants: Variant[] = [
+  {
+    runtime: "llamacpp",
+    tier: "xsmall",
+    repositoryPath: "GGUF/osCode-GGUF-xSmall-Q4_K_M.gguf",
+    folder: "xsmall",
+    bytes: archiveBytes.v2.llamacpp.xsmall!,
+    shards: 1,
+  },
   {
     runtime: "llamacpp",
     tier: "small",
@@ -184,6 +244,14 @@ export const modelVariants: Variant[] = [
     folder: "large",
     bytes: archiveBytes.v2.llamacpp.large,
     shards: 3,
+  },
+  {
+    runtime: "mlx",
+    tier: "xsmall",
+    repositoryPath: "MLX/osCode-MLX-xSmall-Q4",
+    folder: "osCode-MLX-xSmall-Q4",
+    bytes: archiveBytes.v2.mlx.xsmall!,
+    shards: 1,
   },
   {
     runtime: "mlx",
@@ -215,20 +283,30 @@ export function archiveForVariant(
   variant: Variant,
   release: ModelRelease = defaultModelRelease,
 ) {
+  const bytes = archiveBytes[release][variant.runtime][variant.tier];
+  if (!bytes)
+    throw new Error(
+      `${variant.tier} is not available for the ${release.toUpperCase()} model release`,
+    );
   const root =
     modelRepository + "/osModels-" + (release === "v1" ? "V1" : "V2") + "-D";
   const file =
     variant.runtime === "llamacpp"
-      ? "GGUF/" + variant.tier[0].toUpperCase() + variant.tier.slice(1) + ".zip"
+      ? "GGUF/" +
+        (variant.tier === "xsmall"
+          ? "xSmall"
+          : variant.tier[0].toUpperCase() + variant.tier.slice(1)) +
+        ".zip"
       : variant.repositoryPath + ".zip";
   return {
     url: root + "/" + file,
-    bytes: archiveBytes[release][variant.runtime][variant.tier],
+    bytes,
   };
 }
 
 function ggufFiles(variant: Variant) {
   const match = variant.repositoryPath.match(/^(.*)-00001-of-(\d{5})\.gguf$/i);
+  if (!match && variant.shards === 1) return [variant.repositoryPath];
   if (!match || Number(match[2]) !== variant.shards)
     throw new Error("The shared GGUF catalogue is invalid");
   return Array.from(
@@ -252,16 +330,18 @@ function mlxFiles(variant: Variant) {
     prefix + "/tokenizer.json",
     prefix + "/tokenizer_config.json",
     prefix + "/README.md",
-    ...Array.from(
-      { length: variant.shards },
-      (_, index) =>
-        prefix +
-        "/model-" +
-        String(index + 1).padStart(5, "0") +
-        "-of-" +
-        String(variant.shards).padStart(5, "0") +
-        ".safetensors",
-    ),
+    ...(variant.tier === "xsmall"
+      ? [prefix + "/model.safetensors"]
+      : Array.from(
+          { length: variant.shards },
+          (_, index) =>
+            prefix +
+            "/model-" +
+            String(index + 1).padStart(5, "0") +
+            "-of-" +
+            String(variant.shards).padStart(5, "0") +
+            ".safetensors",
+        )),
   ];
 }
 
@@ -287,6 +367,7 @@ export function archiveFilesForVariant(
       "video_preprocessor_config.json",
     ];
   const projector = {
+    xsmall: "osCode-GGUF-xSmall-mmproj-Q3_K_M.gguf",
     small: "osCode-GGUF-Small-mmproj-Q5_K_M.gguf",
     medium: "osCode-GGUF-Medium-mmproj-Q6_K.gguf",
     large: "osCode-GGUF-Large-mmproj-Q8_0.gguf",
@@ -328,6 +409,18 @@ export function validateArchiveEntry(
   if (name.endsWith("/")) return null;
   const basename = parts.at(-1)!;
   if (
+    parts[0] === "__MACOSX" &&
+    (basename.startsWith("._") || basename === ".DS_Store")
+  ) {
+    if (
+      !Number.isSafeInteger(entry.uncompressedSize) ||
+      entry.uncompressedSize < 0 ||
+      entry.uncompressedSize > 4 * 1024 ** 2
+    )
+      throw new Error("Unexpected model archive metadata: " + name);
+    return null;
+  }
+  if (
     !allowedFiles.has(basename) ||
     !Number.isSafeInteger(entry.uncompressedSize) ||
     entry.uncompressedSize < 1 ||
@@ -363,41 +456,136 @@ export async function verifiedCrc32(
     );
 }
 
-async function downloadArchive(
+function abortableDelay(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(resolve, milliseconds);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timeout);
+        reject(new DOMException("Download stopped", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+}
+
+export async function downloadArchive(
   url: string,
   destination: string,
   expectedBytes: number,
   signal: AbortSignal,
   onProgress: (progress: number, file: string) => void,
+  fetchArchive: ModelArchiveFetch = fetch,
 ) {
-  const response = await fetch(url, {
-    redirect: "follow",
-    signal,
-    headers: { "user-agent": "osChat-model-downloader" },
-  });
-  if (!response.ok || !response.body)
-    throw new Error(
-      "Could not download model archive (" + response.status + ")",
-    );
-  const length = Number(response.headers.get("content-length"));
-  if (length && length !== expectedBytes)
-    throw new Error("The published model archive size changed");
-  let received = 0;
-  const stream = Readable.fromWeb(response.body as never);
-  stream.on("data", (chunk: Buffer) => {
-    received += chunk.length;
-    if (received > expectedBytes)
-      stream.destroy(new Error("Model archive exceeds its expected size"));
-    onProgress(
-      Math.min(65, Math.floor((received / expectedBytes) * 65)),
-      "Downloading model archive",
-    );
-  });
-  await pipeline(stream, createWriteStream(destination, { flags: "wx" }), {
-    signal,
-  });
-  if (received !== expectedBytes)
-    throw new Error("The model archive download is incomplete");
+  let lastError: unknown;
+  const attempts = 5;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (signal.aborted)
+      throw new DOMException("Download stopped", "AbortError");
+    let received = await fs
+      .stat(destination)
+      .then((value) => value.size)
+      .catch(() => 0);
+    if (received > expectedBytes) {
+      await fs.rm(destination, { force: true });
+      received = 0;
+    }
+    if (received === expectedBytes) return;
+    const requestedOffset = received;
+    try {
+      const response = await fetchArchive(url, {
+        redirect: "follow",
+        signal,
+        headers: {
+          "user-agent": "osChat-model-downloader",
+          ...(requestedOffset
+            ? { range: `bytes=${requestedOffset}-` }
+            : undefined),
+        },
+      });
+      if (requestedOffset > 0 && response.status === 416) {
+        await response.body?.cancel().catch(() => undefined);
+        await fs.rm(destination, { force: true });
+        received = 0;
+        throw new Error(
+          "The server rejected the saved model archive range; retrying from the beginning",
+        );
+      }
+      if (!response.ok || !response.body)
+        throw new Error(
+          "Could not download model archive (" + response.status + ")",
+        );
+      const resumed = requestedOffset > 0 && response.status === 206;
+      if (requestedOffset > 0 && !resumed) {
+        received = 0;
+        await fs.rm(destination, { force: true });
+      }
+      if (resumed) {
+        const contentRange = response.headers.get("content-range") || "";
+        if (!contentRange.startsWith(`bytes ${requestedOffset}-`))
+          throw new Error("The model archive resume response is invalid");
+      }
+      const length = Number(response.headers.get("content-length"));
+      const expectedResponseBytes = expectedBytes - received;
+      if (length && length !== expectedResponseBytes)
+        throw new Error("The published model archive size changed");
+      const stream = Readable.fromWeb(response.body as never);
+      let stallTimeout: NodeJS.Timeout | undefined;
+      const resetStallTimeout = () => {
+        clearTimeout(stallTimeout);
+        stallTimeout = setTimeout(
+          () =>
+            stream.destroy(
+              new Error("Model archive download stalled; retrying"),
+            ),
+          60_000,
+        );
+      };
+      resetStallTimeout();
+      stream.on("data", (chunk: Buffer) => {
+        resetStallTimeout();
+        received += chunk.length;
+        if (received > expectedBytes)
+          stream.destroy(new Error("Model archive exceeds its expected size"));
+        onProgress(
+          Math.min(65, Math.floor((received / expectedBytes) * 65)),
+          "Downloading model archive",
+        );
+      });
+      try {
+        await pipeline(
+          stream,
+          createWriteStream(destination, { flags: resumed ? "a" : "w" }),
+          { signal },
+        );
+      } finally {
+        clearTimeout(stallTimeout);
+      }
+      if (received !== expectedBytes)
+        throw new Error("The model archive download is incomplete");
+      return;
+    } catch (error) {
+      if (signal.aborted) throw error;
+      lastError = error;
+      if (
+        /published model archive size changed|exceeds its expected size|resume response is invalid/i.test(
+          error instanceof Error ? error.message : String(error),
+        )
+      )
+        throw error;
+      if (attempt < attempts - 1) {
+        onProgress(
+          Math.min(65, Math.floor((received / expectedBytes) * 65)),
+          "Retrying model archive",
+        );
+        await abortableDelay(Math.min(5_000, 500 * 2 ** attempt), signal);
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? new Error(`Could not download model archive: ${lastError.message}`)
+    : new Error("Could not download model archive");
 }
 
 export async function downloadModelVariant(options: {
@@ -407,6 +595,7 @@ export async function downloadModelVariant(options: {
   release?: ModelRelease;
   signal: AbortSignal;
   onProgress: (progress: number, file: string) => void;
+  fetchArchive?: ModelArchiveFetch;
 }) {
   const variant = modelVariants.find(
     (item) => item.runtime === options.runtime && item.tier === options.tier,
@@ -440,22 +629,32 @@ export async function downloadModelVariant(options: {
       archive.bytes,
       options.signal,
       options.onProgress,
+      options.fetchArchive,
     );
     const allowed = new Set(required);
     const entries = new Map<string, ZipEntry>();
     let totalBytes = 0;
+    let archiveEntries = 0;
     await extractZip(zipPath, {
       dir: unpacked,
       onEntry: (entry) => {
         if (options.signal.aborted)
           throw new DOMException("Download stopped", "AbortError");
         const basename = validateArchiveEntry(entry, allowed);
+        if (!entry.fileName.endsWith("/")) {
+          archiveEntries += 1;
+          totalBytes += entry.uncompressedSize;
+        }
+        if (
+          archiveEntries > required.length * 3 + 16 ||
+          totalBytes > 10 * 1024 ** 3
+        )
+          throw new Error("Model archive exceeds its expected contents");
         if (!basename) return;
         if (entries.has(basename))
           throw new Error("Duplicate model archive entry: " + basename);
         entries.set(basename, entry);
-        totalBytes += entry.uncompressedSize;
-        if (entries.size > required.length || totalBytes > 10 * 1024 ** 3)
+        if (entries.size > required.length)
           throw new Error("Model archive exceeds its expected contents");
         options.onProgress(
           65 + Math.floor((entries.size / required.length) * 20),

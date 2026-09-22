@@ -8,6 +8,7 @@ import "@xterm/xterm/css/xterm.css";
 import "./styles.css";
 import "./advanced.css";
 import "./startup.css";
+import "./desktop-flat.css";
 import osChatIcon from "./assets/oschat-icon.png";
 
 const root = ReactDOM.createRoot(document.getElementById("root")!);

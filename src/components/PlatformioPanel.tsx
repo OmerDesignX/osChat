@@ -166,7 +166,7 @@ export function PlatformioPanel({
               disabled={Boolean(busy)}
               onClick={() => perform("Update", window.oscode.updatePlatformio)}
             >
-              <FeatherIcon icon="refresh-cw" size="14" /> Update
+              <FeatherIcon icon="loader" size="14" /> Update
             </button>
           </section>
 
@@ -267,7 +267,7 @@ export function PlatformioPanel({
                   aria-label="Refresh PlatformIO"
                   onClick={refresh}
                 >
-                  <FeatherIcon icon="refresh-cw" size="16" />
+                  <FeatherIcon icon="loader" size="16" />
                 </button>
               </div>
               {state.devices.length > 0 && (
