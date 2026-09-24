@@ -56,7 +56,7 @@ test("desktop flat design loads last and keeps Paper Light accessible", () => {
   assert.match(app, /className="folder-list"/);
   assert.doesNotMatch(app, /<nav className="workspace-nav"/);
   assert.match(app, /hideHistory/);
-  assert.match(ai, /className="ai-main-menu"/);
+  assert.match(ai, /label="Settings"[\s\S]*onOpenAppSettings\?\.\(\)/);
   assert.match(ai, /workspaceMode\s*\?\s*"Model"/);
 });
 

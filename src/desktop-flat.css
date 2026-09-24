@@ -899,6 +899,215 @@
   }
 }
 
+/* Switch thumbs stay visible against the enabled blue track. */
+#root .oschat-app :is(.setting-toggle, .toggle-row) > i {
+  border: 1px solid color-mix(in srgb, var(--muted) 65%, var(--line)) !important;
+}
+#root .oschat-app :is(.setting-toggle, .toggle-row) > input:checked + i {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--text)) !important;
+  background: color-mix(in srgb, var(--accent) 82%, var(--panel2)) !important;
+}
+#root .oschat-app :is(.setting-toggle, .toggle-row) > input:checked + i::after {
+  background: #fff !important;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%) !important;
+}
+
+/* The composer tray is one contrasting surface across all three themes. */
+#root .oschat-app {
+  --composer-zone: color-mix(in srgb, var(--chat-bg) 57%, #080b0d);
+}
+#root .oschat-app.blue-dark {
+  --composer-zone: #07101a;
+}
+#root .oschat-app.blue-light {
+  --composer-zone: #e9edf0;
+}
+#root .oschat-app .oschat-main.chat-view .ai-panel {
+  background: var(--composer-zone) !important;
+}
+#root .oschat-app .oschat-main.chat-view .ai-conversation {
+  background: var(--chat-bg) !important;
+}
+#root
+  .oschat-app
+  .oschat-main.chat-view
+  .ai-panel
+  :is(.ai-composer-controls, .ai-composer, .ai-context) {
+  background-color: var(--composer-zone) !important;
+}
+#root .oschat-app .oschat-main.chat-view .ai-composer {
+  border-color: color-mix(in srgb, var(--line) 72%, var(--accent)) !important;
+}
+#root
+  .oschat-app
+  .ai-message.user
+  :is(.ai-message-author, .ai-message-author span, p),
+#root .oschat-app .ai-message.user .ai-message-content {
+  color: var(--accent) !important;
+}
+#root
+  .oschat-app
+  .ai-message
+  :is(.ai-reasoning, .ai-response-actions)
+  > summary
+  span,
+#root
+  .oschat-app
+  .ai-message
+  :is(.ai-reasoning, .ai-response-actions)
+  > summary
+  small,
+#root .oschat-app .ai-action-card header :is(span, time, em),
+#root .oschat-app .ai-action-output > summary,
+#root .oschat-app .ai-live-work .ai-thinking :is(b, small) {
+  font-size: 14px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+/* Every recent-chat row has a readable boundary, including the final row. */
+#root .oschat-app .sidebar-list article {
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 82%, var(--muted)) !important;
+}
+
+/* The selected value and its chevron occupy separate lanes. */
+#root .oschat-app .flat-setting-row {
+  gap: 16px;
+}
+#root .oschat-app .flat-setting-row select {
+  min-width: 0;
+  box-sizing: border-box;
+  padding-inline: 12px 42px !important;
+  background-position: right 12px center !important;
+  background-size: 18px !important;
+  text-overflow: ellipsis;
+}
+#root .oschat-app[dir="rtl"] .flat-setting-row select {
+  padding-inline: 42px 12px !important;
+  background-position: left 12px center !important;
+}
+
+/* Notification copy can wrap independently from icons and actions. */
+#root .oschat-app .notification-list article {
+  min-width: 0;
+}
+#root .oschat-app .notification-list article > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#root .oschat-app .notification-list article :is(b, p, time) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* iOS composer geometry and palette: dark tray, filled pill, no outline. */
+#root .oschat-app {
+  --composer-zone: #101213;
+  --composer-input: #25292a;
+  --oschat-selected-fill: var(--panel);
+}
+#root .oschat-app.blue-dark {
+  --composer-zone: #050b14;
+  --composer-input: #0b1829;
+}
+#root .oschat-app.blue-light {
+  --composer-zone: #e9edf0;
+  --composer-input: #f1f3f5;
+}
+#root .oschat-app .oschat-main.chat-view .ai-composer {
+  min-height: 66px;
+  padding: 10px;
+  border: 0 !important;
+  outline: 0 !important;
+  border-radius: 33px !important;
+  background: var(--composer-input) !important;
+  box-shadow: none !important;
+}
+#root .oschat-app .oschat-main.chat-view .ai-composer.expanded-input {
+  border-radius: 26px !important;
+}
+#root .oschat-app .oschat-main.chat-view .ai-composer textarea {
+  min-height: 42px;
+  padding: 9px 5px;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+#root .oschat-app .oschat-main.chat-view .ai-composer:focus-within {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+/* Chat selection is a subtle panel tint in every theme. */
+#root
+  .oschat-app
+  :is(
+    .top-actions .icon-button.active,
+    .ai-chat-tab.active,
+    .oschat-settings > aside nav button.active
+  ) {
+  background: var(--oschat-selected-fill) !important;
+}
+#root .oschat-app .ai-chat-tab {
+  width: 210px;
+  min-width: 112px;
+  max-width: 210px;
+}
+#root .oschat-app .ai-chat-title-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(300px, calc(100vw - 24px));
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--overlay-surface);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 20%);
+}
+#root .oschat-app .sidebar-list article {
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--line) 38%,
+    transparent
+  ) !important;
+}
+
+/* Model and permission choices use the same type scale as Files and Chat. */
+#root
+  .oschat-app
+  :is(.ai-tier-picker, .ai-capability-popover)
+  button:not([aria-label="Close permissions"]),
+#root
+  .oschat-app
+  :is(.ai-tier-picker, .ai-capability-popover)
+  button:not([aria-label="Close permissions"])
+  b {
+  font-size: 15px !important;
+  font-weight: 500 !important;
+}
+#root .oschat-app .oschat-settings button:not(.icon-button) {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* FitAddon measures the host box but subtracts padding from .xterm itself. */
+#root .oschat-app .terminal-host {
+  padding: 0 !important;
+}
+#root .oschat-app .terminal-host .xterm {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px 18px;
+}
+
 /* Desktop hover feedback is color-only: keep the flat canvas visible. */
 @media (hover: hover) and (pointer: fine) {
   #root

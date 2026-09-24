@@ -26,6 +26,7 @@ import type {
   AiChatThread,
   AiEditMode,
   AiEngine,
+  AiHardwareProfile,
   AiInferenceHardware,
   AiModel,
   AiModelTier,
@@ -1425,6 +1426,13 @@ export function App() {
             void updateInterfaceTypography({ interfaceFontWeight: value })
           }
           models={models}
+          selectedModelPath={aiModel}
+          aiEditMode={aiEditMode}
+          setAiEditMode={setAiEditMode}
+          aiContextLimit={aiContextLimit}
+          setAiContextLimit={setAiContextLimit}
+          aiHardware={aiHardware}
+          setAiHardware={setAiHardware}
           engine={modelEngine}
           setEngine={setModelEngine}
           downloadingTier={downloadingTier}
@@ -1495,6 +1503,13 @@ type SettingsProps = {
     weight: EditorPreferences["interfaceFontWeight"],
   ) => void;
   models: AiModel[];
+  selectedModelPath: string;
+  aiEditMode: AiEditMode;
+  setAiEditMode: (mode: AiEditMode) => void;
+  aiContextLimit: number;
+  setAiContextLimit: (limit: number) => void;
+  aiHardware: AiInferenceHardware;
+  setAiHardware: (hardware: AiInferenceHardware) => void;
   engine: AiEngine;
   setEngine: (engine: AiEngine) => void;
   downloadingTier: string;
@@ -1520,6 +1535,37 @@ type SettingsProps = {
   openSecureData: () => void;
 };
 function SettingsDialog(props: SettingsProps) {
+  const [hardwareProfile, setHardwareProfile] =
+    useState<AiHardwareProfile | null>(null);
+  useEffect(() => {
+    let current = true;
+    void window.oscode
+      .aiHardwareProfile()
+      .then((profile) => {
+        if (current) setHardwareProfile(profile);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, []);
+  const selectedModel = props.models.find(
+    (item) => item.path === props.selectedModelPath,
+  );
+  const maxContext = selectedModel?.contextLimit || 262_144;
+  const contextOptions = [
+    ...new Set([
+      8_192,
+      16_384,
+      32_768,
+      65_536,
+      131_072,
+      262_144,
+      props.aiContextLimit,
+    ]),
+  ]
+    .filter((limit) => limit <= maxContext || limit === props.aiContextLimit)
+    .sort((a, b) => a - b);
   const sections = [
     ["appearance", "sliders", "Appearance"],
     ["models", "cpu", "Models"],
@@ -1668,6 +1714,62 @@ function SettingsDialog(props: SettingsProps) {
                 value={props.aiThinkingEnabled}
                 set={props.setAiThinkingEnabled}
               />
+              <SettingGroup
+                title="AI settings"
+                description="Choose how the local model runs and handles project edits."
+              >
+                <label className="flat-setting-row">
+                  <span>Inference hardware</span>
+                  <select
+                    value={props.aiHardware}
+                    onChange={(event) =>
+                      props.setAiHardware(
+                        event.target.value as AiInferenceHardware,
+                      )
+                    }
+                  >
+                    <option value="auto">Automatic</option>
+                    <option
+                      value="gpu"
+                      disabled={!hardwareProfile?.gpuAvailable}
+                    >
+                      GPU
+                      {hardwareProfile?.gpuName
+                        ? ` · ${hardwareProfile.gpuName}`
+                        : ""}
+                    </option>
+                    <option value="cpu">CPU</option>
+                  </select>
+                </label>
+                <label className="flat-setting-row">
+                  <span>File edits</span>
+                  <select
+                    value={props.aiEditMode}
+                    onChange={(event) =>
+                      props.setAiEditMode(event.target.value as AiEditMode)
+                    }
+                  >
+                    <option value="ask">Ask before saving</option>
+                    <option value="auto">Use saved permissions</option>
+                    <option value="read-only">Read only</option>
+                  </select>
+                </label>
+                <label className="flat-setting-row">
+                  <span>Context</span>
+                  <select
+                    value={props.aiContextLimit}
+                    onChange={(event) =>
+                      props.setAiContextLimit(Number(event.target.value))
+                    }
+                  >
+                    {contextOptions.map((limit) => (
+                      <option value={limit} key={limit}>
+                        {Math.round(limit / 1024)}k tokens
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </SettingGroup>
               <SettingGroup
                 title="osChat models"
                 description="Download one verified tier at a time from the shared osCode model repository."

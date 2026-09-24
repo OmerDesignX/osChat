@@ -499,6 +499,19 @@ export function AiPanel({
     top: 0,
     left: 0,
   });
+  const [chatTitleTooltip, setChatTitleTooltip] = useState<{
+    title: string;
+    top: number;
+    left: number;
+  } | null>(null);
+  const showChatTitle = (title: string, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    setChatTitleTooltip({
+      title: title || "New chat",
+      top: rect.bottom + 8,
+      left: Math.max(12, Math.min(rect.left, window.innerWidth - 312)),
+    });
+  };
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AiChatAttachment[]>([]);
@@ -515,7 +528,6 @@ export function AiPanel({
   >("");
   const [status, setStatus] = useState("Ready · local only");
   const [modelsOpen, setModelsOpen] = useState(false);
-  const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [tierPickerOpen, setTierPickerOpen] = useState(false);
   const [permissionsDrawerOpen, setPermissionsDrawerOpen] = useState(
     () => !workspaceMode,
@@ -593,7 +605,6 @@ export function AiPanel({
     setHistoryOpen(false);
     setPermissionOpen(false);
     setModelsOpen(false);
-    setMainMenuOpen(false);
     setAddMenuOpen(false);
     setOllamaPickerOpen(false);
     setCustomListOpen(false);
@@ -1253,7 +1264,6 @@ export function AiPanel({
       setHistoryOpen(false);
       setPermissionOpen(false);
       setModelsOpen(false);
-      setMainMenuOpen(false);
       setAddMenuOpen(false);
       setOllamaPickerOpen(false);
       setCustomListOpen(false);
@@ -1263,16 +1273,6 @@ export function AiPanel({
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [browserAccess, computerAccess, expanded]);
-  useEffect(() => {
-    if (!mainMenuOpen) return;
-    const closeMenu = (event: PointerEvent) => {
-      const target = event.target as Element | null;
-      if (target?.closest(".ai-main-menu, .ai-main-menu-toggle")) return;
-      setMainMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", closeMenu, true);
-    return () => document.removeEventListener("pointerdown", closeMenu, true);
-  }, [mainMenuOpen]);
   useEffect(() => {
     const textarea = composerInputRef.current;
     if (!textarea) return;
@@ -2394,18 +2394,14 @@ export function AiPanel({
           void refreshAgentState();
         }}
       />
-      <span className="ai-main-menu-toggle">
-        <IconButton
-          icon="menu"
-          label="Menu"
-          active={mainMenuOpen}
-          onClick={() => {
-            const shouldOpen = !mainMenuOpen;
-            closeAiPopups();
-            setMainMenuOpen(shouldOpen);
-          }}
-        />
-      </span>
+      <IconButton
+        icon="settings"
+        label="Settings"
+        onClick={() => {
+          closeAiPopups();
+          onOpenAppSettings?.();
+        }}
+      />
       {!workspaceMode && (
         <IconButton
           icon={expanded ? "minimize-2" : "maximize-2"}
@@ -2419,37 +2415,6 @@ export function AiPanel({
       )}
     </div>
   );
-
-  const mainMenu = mainMenuOpen
-    ? createPortal(
-        <div className="ai-main-menu" role="menu" aria-label="Chat menu">
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setMainMenuOpen(false);
-              openAiPopup("models");
-            }}
-          >
-            <FeatherIcon icon="cpu" size="16" /> AI settings
-          </button>
-          {onOpenAppSettings && <span className="ai-main-menu-divider" />}
-          {onOpenAppSettings && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMainMenuOpen(false);
-                onOpenAppSettings();
-              }}
-            >
-              <FeatherIcon icon="settings" size="16" /> Settings
-            </button>
-          )}
-        </div>,
-        document.querySelector(".app") || document.body,
-      )
-    : null;
 
   const popoverStyle = expanded
     ? {
@@ -2642,7 +2607,15 @@ export function AiPanel({
                   type="button"
                   role="tab"
                   aria-selected={chat.id === chatId}
-                  title={chat.title}
+                  aria-label={chat.title || "New chat"}
+                  onMouseEnter={(event) =>
+                    showChatTitle(chat.title, event.currentTarget)
+                  }
+                  onMouseLeave={() => setChatTitleTooltip(null)}
+                  onFocus={(event) =>
+                    showChatTitle(chat.title, event.currentTarget)
+                  }
+                  onBlur={() => setChatTitleTooltip(null)}
                   onClick={() => chooseChat(chat, false)}
                 >
                   {pinned && <FeatherIcon icon="bookmark" size="13" />}
@@ -2664,6 +2637,21 @@ export function AiPanel({
           })}
         </div>
       )}
+
+      {chatTitleTooltip &&
+        createPortal(
+          <div
+            className="ai-chat-title-tooltip"
+            role="tooltip"
+            style={{
+              top: chatTitleTooltip.top,
+              left: chatTitleTooltip.left,
+            }}
+          >
+            {chatTitleTooltip.title}
+          </div>,
+          document.querySelector(".app") || document.body,
+        )}
 
       {chatTabMenuChat &&
         createPortal(
@@ -3299,8 +3287,6 @@ export function AiPanel({
           </div>,
           document.querySelector(".app") || document.body,
         )}
-
-      {mainMenu}
 
       {!hideHistory &&
         historyOpen &&
@@ -4000,7 +3986,7 @@ export function AiPanel({
                 disabled={pipelineOccupied}
                 onClick={() => void retryLastResponse()}
               >
-                <FeatherIcon icon="loader" size="14" />
+                <FeatherIcon icon="rotate-ccw" size="14" />
                 Retry response
               </button>
             </div>
